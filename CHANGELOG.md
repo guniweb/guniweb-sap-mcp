@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-17
+
+One server, many people, no shared account — and a way to try it all without an SAP system.
+This release adds the **personal SAP login per request** (`authType: user-basic`) that the new
+[n8n community node](https://github.com/guniweb/n8n-nodes-guniweb-sap) uses so that every
+person acts in SAP as themselves, an **Admin API** to manage destinations and tokens over HTTP,
+and a **`--demo` mode** with a built-in mock S/4HANA. Nothing changes for a running server that
+uses none of them.
+
+### Added
+
+- **`--demo` — try the server without an SAP system.** `npx guniweb-sap-mcp --demo` (also `SAP_MCP_DEMO=true`) starts a built-in mock S/4HANA in the same process — an in-memory OData V2 gateway on `127.0.0.1` with three services under their real SAP names and field names (`API_BUSINESS_PARTNER`, `API_SALES_ORDER_SRV`, `API_PRODUCT_SRV`; ~20 business partners with addresses, 15 sales orders with items, 10 products with descriptions) — and points the server at it. No `SAP_*` configuration is needed; a real one (`SAP_BASE_URL`, `--destinations`) is refused alongside `--demo` so it is always clear where the tools talk to. The mock behaves like a Gateway where it matters: catalog discovery (`IWFND/CATALOGSERVICE;v=2`, `substringof` search, the alternative V2/V4 paths answer 404), service documents and `$metadata` (EDMX with associations, `sap:` annotations, function imports), `$filter` (eq/ne/gt/ge/lt/le, and/or/not, substringof/startswith/endswith/tolower/toupper, `datetime'…'`), `$orderby/$top/$skip/$select/$expand/$inlinecount`, single entities and navigation, CSRF (`x-csrf-token: fetch`, 403 `Required` without it), ETags with `If-Match` (412 on a stale one), create with deep insert and SAP-style key assignment, MERGE (also tunnelled through POST), DELETE with cascading items, two function imports, `$batch` with atomic changesets, `sap-client` enforcement and SAP-shaped error payloads. Writes need `--allow-write` as always. Sample data only, in memory, gone at exit; nothing leaves the machine. Works with stdio and HTTP transport; the startup log says `DEMO-MODUS` and the self-test runs against the mock.
+- **Admin API — `--admin-token <secret>` / `SAP_MCP_ADMIN_TOKEN`.** The CLI's operations on `destinations.json` are now also available over HTTP under `/admin`, so an n8n workflow, a provisioning script or a person with `curl` can create destinations and issue or revoke tokens without a shell on the host: `GET/PUT/DELETE /admin/destinations[/:name]`, `GET/POST /admin/tokens`, `DELETE /admin/tokens/:ref`. CLI and API share one implementation (`DestinationsAdmin`), so both validate the result exactly like the server before writing and write atomically. Separate keys, separate doors: the admin secret (min. 16 characters) opens *only* `/admin`, the n8n tokens and `--api-key` open *only* `/mcp` — a leaked n8n token cannot mint further access, an admin secret cannot read SAP data. Wrong secrets are counted per client address (`429` after 10 failures per minute); every change is logged with action, target and client address, never with the token or the secret; responses are `Cache-Control: no-store`. Every write reloads the running configuration before answering (`"reloaded": true` — or `false` with the errors when the running server cannot resolve a `${VAR}` written with `?allowMissingEnv=true`; the last valid configuration then stays in force). Without `--admin-token`, `/admin/*` answers `404`. Requires `--destinations` and HTTP/SSE transport; anything else is a startup error.
+- **Personal SAP login per request — `authType: "user-basic"`.** A destination may now name system and client only; SAP user and password arrive with each request as `X-SAP-Username`/`X-SAP-Password` (or `X-SAP-Authorization: Basic …`) next to the Bearer token, and become the Basic-Auth configuration of that one request. Everyone acts in SAP as themselves — authorizations, change documents and audit trail on the real user, no shared technical account. The token still authenticates at the MCP server, selects the destination and applies its policy. No fallback: without a login the request is answered `401` with a hint; a login sent to a destination that runs on a technical user is answered `400` rather than silently ignored. Passwords are never logged; the SAP user is bound to the request logger (`sapUser` on every tool line). Catalog and metadata caches are kept per user (in memory only, bounded). HTTP/SSE transport only — stdio has no header for the login and refuses to start with such a default destination. The startup self-test skips these destinations (nothing to log in with) and says so. Built for the [n8n community node](https://github.com/guniweb/n8n-nodes-guniweb-sap), whose credential carries the SAP login.
+- **Bootstrap without any SAP configuration.** With `--admin-token` the server starts even when `destinations.json` does not exist yet and no `SAP_*` variable is set: `/mcp` answers `503` (with a hint) until the first destination — and a token for it, or a destination named `default` — has been created through the API. `docker run … -e SAP_MCP_ADMIN_TOKEN=… -e SAP_MCP_DESTINATIONS=/config/destinations.json` is a complete first start.
+
+### Changed
+
+- `destinations remove` (CLI and API) refuses to remove the **last** destination — the server could not load the resulting file; add a replacement first or delete the file.
+- Malformed JSON in a request body is answered with a JSON `400` (`{"error": "Invalid JSON body: …"}`) instead of Express' HTML error page — on `/admin` and `/mcp` alike.
+- A `destinations.json` that has never existed no longer produces a "file invalid" warning on every re-check; only a file that disappears after it was loaded does.
+
+### Fixed
+
+- `sap_function`, `sap_batch` and `sap_nl_query` now accept the technical service name (`API_SALES_ORDER_SRV`) and absolute URLs like `sap_read`/`sap_query`/`sap_get_metadata` already did (R17). Before, the technical name — exactly what `sap_discover_services` returns — ended in `CONNECTION_ERROR Invalid URL` for these three tools.
+
 ## [0.3.1] - 2026-08-16
 
 Documentation and links release, plus two robustness fixes from the first rollout of named

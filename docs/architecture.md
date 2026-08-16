@@ -40,8 +40,9 @@ graph TB
         redirect["Redirect Handler<br/><i>Re-inject auth on 307</i>"]
     end
 
-    subgraph Auth["Authentication (7 Types)"]
+    subgraph Auth["Authentication (8 Types)"]
         basic["basic<br/><i>Base64 header</i>"]
+        userbasic["user-basic<br/><i>login from request headers</i>"]
         oauth2["oauth2<br/><i>CC token + cache</i>"]
         apikey2["apikey<br/><i>APIKey header</i>"]
         ias["ias / xsuaa<br/><i>OIDC + JWKS</i>"]
@@ -298,7 +299,7 @@ flowchart TB
 ```
 src/
 ├── index.ts                    # Entry point, CLI, transport init
-├── auth/                       # 7 authentication types
+├── auth/                       # 8 authentication types (incl. user-basic: personal login per request)
 │   ├── types.ts                # SapDestination discriminated union
 │   ├── destination-factory.ts  # Creates destination from config
 │   ├── oauth2-client.ts        # OAuth2 CC token manager
@@ -309,7 +310,7 @@ src/
 │   ├── token-manager.ts        # TokenManager interface
 │   └── oidc-discovery.ts       # OIDC/.well-known discovery
 ├── config/                     # Configuration & CLI
-│   ├── types.ts                # Zod schema (all 7 auth types) — also the destination entry schema
+│   ├── types.ts                # Zod schema (all 8 auth types) — also the destination entry schema
 │   ├── index.ts                # loadConfig() from env vars
 │   ├── cli.ts                  # CLI args + --tiers, --allow-write, --tool-timeout, --destinations
 │   └── startup-selftest.ts     # Five-stage self-test + SAP_CLIENT warning, per destination

@@ -6,7 +6,7 @@ Connect n8n workflows to SAP S/4HANA and ECC via OData V2, V4, IDocs, and RFC/BA
 
 ```mermaid
 graph LR
-    n8n["n8n workflow<br/>AI-assisted, human-governed"] -->|MCP Protocol| MCP["guniweb-sap-mcp<br/>22 Tools &bull; 7 Auth Types"]
+    n8n["n8n workflow<br/>AI-assisted, human-governed"] -->|MCP Protocol| MCP["guniweb-sap-mcp<br/>22 Tools &bull; 8 Auth Types"]
     MCP -->|"OData V2/V4<br/>IDoc XML<br/>RFC/BAPI"| SAP["SAP S/4HANA & ECC"]
     MCP -->|"OAuth2 / JWT"| BTP["SAP BTP"]
     BTP --> SAP
@@ -41,12 +41,13 @@ graph LR
 - **IDoc / RFC auto-disable** -- tools hidden when the corresponding configuration is missing
 - **MCP Annotations** -- readOnlyHint, destructiveHint, idempotentHint on all 22 tools
 
-### Authentication (7 Types)
+### Authentication (8 Types)
 
 ```mermaid
 graph TB
     subgraph Technical["Technical User Auth"]
         basic["basic<br/><i>Direct S/4HANA</i>"]
+        userbasic["user-basic<br/><i>Personal SAP login per request</i>"]
         oauth2["oauth2<br/><i>BTP Client Credentials</i>"]
         apikey["apikey<br/><i>Sandbox / Testing</i>"]
     end
@@ -72,6 +73,18 @@ graph TB
 - **1267 Tests** -- Unit, integration, E2E with CI/CD via GitHub Actions
 
 ## Quick Start
+
+### Try it without an SAP system: `--demo`
+
+No SAP system at hand? Start the server against a built-in mock S/4HANA and try every tool from n8n or any MCP client:
+
+```bash
+npx guniweb-sap-mcp --demo                                   # stdio — n8n MCP Client in command mode
+npx guniweb-sap-mcp --demo --transport http --port 8808      # HTTP — n8n MCP Client with URL http://localhost:8808/mcp
+npx guniweb-sap-mcp --demo --allow-write                     # also try sap_create / sap_update / sap_delete / sap_batch
+```
+
+The demo starts an in-memory OData V2 gateway on localhost (three services with real SAP field names — `API_BUSINESS_PARTNER`, `API_SALES_ORDER_SRV`, `API_PRODUCT_SRV`; ~20 business partners, 15 sales orders with items, 10 products) and points the server at it. It behaves like a Gateway where it matters: catalog discovery, `$metadata`, `$filter`/`$expand`/paging, CSRF tokens, ETags, deep insert, function imports, `$batch` with changesets, SAP-style error payloads. Sample data only — nothing is real, nothing leaves your machine, and changes are gone when the process ends. Also `SAP_MCP_DEMO=true` (e.g. in Docker). A workflow you build against the demo runs against a real system after you replace `--demo` with your `SAP_*` configuration.
 
 ### 1. Install
 
@@ -192,7 +205,8 @@ guniweb-sap-mcp --transport http --port 8808 --destinations /config/destinations
 }
 ```
 
-- **One entry = one connection.** Every entry accepts exactly the fields the `SAP_*` variables accept (`authType` and its credentials, `sapClient`, `baseUrl`) — all seven authentication types work per destination.
+- **One entry = one connection.** Every entry accepts exactly the fields the `SAP_*` variables accept (`authType` and its credentials, `sapClient`, `baseUrl`) — all authentication types work per destination.
+- **Personal SAP login per request** — `"authType": "user-basic"`: the destination knows system and client only; SAP user and password come with each request (`X-SAP-Username`/`X-SAP-Password`, in n8n the credential of the [GuniWeb SAP node](https://github.com/guniweb/n8n-nodes-guniweb-sap)). Everyone acts in SAP as themselves — authorizations, change documents and audit trail on the real user, no shared technical account. No fallback to a technical user (`401` without a login), caches per user, passwords never logged. HTTP transport only. Details in the [setup guide](https://github.com/guniweb/guniweb-sap-mcp/blob/main/docs/setup-guide.md#personal-sap-login-per-request-user-basic).
 - **Secrets stay out of the file.** Any string may contain `${VARIABLE}`; it is resolved from the environment at load time (Docker secrets, `.env`). A placeholder that cannot be resolved makes the file invalid — an empty password would otherwise surface as a misleading `401` from SAP.
 - **Hot reload.** The file is watched; a change is picked up on the next request, no restart. `kill -HUP <pid>` forces a reload. An invalid file **never** replaces the running configuration — the error is logged and the last valid one stays in force.
 - **Backwards compatible.** Without `--destinations` nothing changes: the `SAP_*` variables are the single destination `default`. With the file, `SAP_*` (if set) is added as `default` unless the file defines one — so an installation can migrate without a gap.
@@ -233,6 +247,27 @@ guniweb-sap-mcp destinations remove s4test [--force]       # refuses while token
 `--set field=value` covers any auth type (`--auth-type oauth2 --set clientId=… --set clientSecret='${BTP_SECRET}' --set tokenServiceUrl=…`); `${ENV_VAR}` values are checked against the current environment (`--allow-missing-env` to skip, e.g. when the variable only exists inside the container). In Docker, run the commands inside the container so they see the same file and environment: `docker compose exec sap-mcp guniweb-sap-mcp tokens issue s4prod`.
 
 - **Per-token permissions** — `"policy": { "readOnly": true, "tiers": ["core", "odata"] }`. A policy only ever *restricts*: `readOnly: true` hides the write tools for that token even when the server runs with `--allow-write` (`readOnly: false` cannot open a read-only server), and `tiers` is a ceiling — tiers outside it are invisible for that token and `sap_enable_tools` cannot switch them on. `tools/list` is filtered per request, so an agent on a read-only token never sees `sap_create` in the first place.
+
+**Admin API — the same operations over HTTP (self-service).** With `--admin-token <secret>` (or `SAP_MCP_ADMIN_TOKEN`, at least 16 characters, e.g. `openssl rand -base64 32`) the server exposes the CLI's operations under `/admin` — for an n8n workflow that provisions a new customer's access, a script, or a person with `curl`, without a shell on the host:
+
+```bash
+guniweb-sap-mcp --transport http --port 8808 --destinations /config/destinations.json --admin-token "$ADMIN"
+
+A="Authorization: Bearer $ADMIN"; J="Content-Type: application/json"; U=http://localhost:8808/admin
+curl -H "$A" $U/destinations                                    # list — never secrets
+curl -H "$A" -H "$J" -X PUT $U/destinations/s4prod \           # create (201) or replace (200)
+     -d '{"baseUrl":"https://s4prod.example.com","authType":"basic","username":"MCP_USER","password":"${S4PROD_PASSWORD}","sapClient":"100"}'
+curl -H "$A" -H "$J" -X POST $U/tokens \                       # → { "token": "gsm_s4prod_…", … } — shown ONCE
+     -d '{"destination":"s4prod","label":"n8n prod","readOnly":true,"tiers":["core","odata"]}'
+curl -H "$A" $U/tokens                                          # label, destination, hash prefix, policy, status
+curl -H "$A" -X DELETE "$U/tokens/n8n%20prod"                   # revoke by label or hash prefix
+curl -H "$A" -X DELETE "$U/destinations/s4test?force=true"      # remove; without force it refuses while tokens exist
+```
+
+- **Separate keys, separate doors.** The admin secret opens *only* `/admin`; the n8n tokens and `--api-key` open *only* `/mcp`. A leaked n8n token cannot mint further access, an admin secret cannot read SAP data. Wrong secrets are counted per client address (`429` after 10 failures per minute); every change is logged with action, target and client address — never the token, never the secret. Without `--admin-token`, `/admin/*` answers `404`.
+- **Effective immediately.** Every write validates like the CLI, writes atomically and reloads the running configuration before answering (`"reloaded": true`). If the server cannot load what was written — typically a `${VAR}` that only your shell knows, written with `?allowMissingEnv=true` — the answer says `"reloaded": false` with the errors, and the last valid configuration stays in force.
+- **Bootstrap without any SAP configuration.** With `--admin-token` the server starts even if `destinations.json` does not exist yet and no `SAP_*` is set: `/mcp` answers `503` until the first destination (and a token, or a destination named `default`) has been created through the API. `docker run … -e SAP_MCP_ADMIN_TOKEN=… -e SAP_MCP_DESTINATIONS=/config/destinations.json` is a complete first start.
+- Put the API behind the same reverse proxy/TLS as `/mcp`; the admin secret travels as a Bearer header like any other credential.
 
 ### 4. Use with n8n
 
@@ -356,7 +391,7 @@ graph TB
         Discovery["Service Discovery<br/>16 Domain Categories"]
         NLQuery["NL-to-OData<br/>Filter Builder"]
         HTTP["SapHttpClient<br/>CSRF &bull; Redirect &bull; Auth"]
-        Auth["Auth Layer<br/>7 Auth Types"]
+        Auth["Auth Layer<br/>8 Auth Types"]
         Cache["Per-User Token Cache<br/>LRU &bull; SHA-256"]
 
         Transport --> UserCtx
@@ -475,7 +510,7 @@ Additionally validated against:
 
 ## Documentation
 
-- [Setup Guide](https://github.com/guniweb/guniweb-sap-mcp/blob/main/docs/setup-guide.md) -- Installation, all 7 auth types, CLI flags, named destinations and tokens, Docker deployment
+- [Setup Guide](https://github.com/guniweb/guniweb-sap-mcp/blob/main/docs/setup-guide.md) -- Installation, all 8 auth types, CLI flags, named destinations and tokens, Docker deployment
 - [Architecture](https://github.com/guniweb/guniweb-sap-mcp/blob/main/docs/architecture.md) -- Technical architecture, request flows, design decisions
 - [API Reference](https://github.com/guniweb/guniweb-sap-mcp/blob/main/docs/api-reference.md) -- All 22 tools, resources, and prompts with parameters
 - [Examples](https://github.com/guniweb/guniweb-sap-mcp/blob/main/docs/examples.md) -- SAP workflow examples with step-by-step instructions
