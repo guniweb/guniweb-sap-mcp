@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions & ideas
+    url: https://github.com/guniweb/guniweb-sap-mcp/discussions
+    about: Ask, share workflows, discuss — best effort, community.
+  - name: Security issue
+    url: https://github.com/guniweb/guniweb-sap-mcp/blob/main/SECURITY.md
+    about: Please report vulnerabilities privately (see SECURITY.md), not as a public issue.
+  - name: Production support / SAP MCP Checkup
+    url: https://guniweb.de/sap-mcp
+    about: Maintenance subscription, SLA and a pre-go-live review by the maintainers.
