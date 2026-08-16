@@ -5,7 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.1] - 2026-08-16
+
+Documentation and links release, plus two robustness fixes from the first rollout of named
+destinations. Nothing changes for a running server unless it hit one of the two fixed cases.
 
 ### Changed
 
@@ -132,6 +135,7 @@ tool had caused which SAP requests.
 - **Source maps from the published tarball.** `dist/index.js.map` is no longer generated; `package.json#files` is now an explicit 3-path whitelist (`dist`, `README.md`, `LICENSE`). The published tarball no longer leaks TypeScript source via `sourcesContent` (Phase 21).
 
 [unreleased]: https://github.com/guniweb/guniweb-sap-mcp/releases
+[0.3.1]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.3.1
 [0.3.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.3.0
 [0.2.2]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.2.2
 [0.2.1]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.2.1
