@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-08-17
+
+Diagnosis fix from the first end-to-end run of the personal SAP login with the n8n node.
+
+### Fixed
+
+- **A wrong SAP password is now reported as an authentication failure**, not as a catalog problem. Measured on an S/4HANA (SAP UCC S22): a rejected Basic-Auth login answers with SAP's HTML page "Anmeldung fehlgeschlagen" — the HTTP status did not survive into the error explainer, so `test-connection` reported stage `auth: ok` and `catalog: failed` with an HTML hint. The explainer now recognises SAP's logon-failure pages (`AUTH_FAILED`, guidance: check user/password, do not retry repeatedly — SAP locks the account) and the diagnosis assigns them to stage `auth` (or `client` when no `SAP_CLIENT` is set). Matters most for the personal login (`user-basic`), where the password comes from each person's n8n credential.
+
 ## [0.4.0] - 2026-08-17
 
 One server, many people, no shared account — and a way to try it all without an SAP system.
