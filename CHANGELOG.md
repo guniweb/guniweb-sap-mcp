@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Catalog search is now case-insensitive everywhere — as the tool always claimed.** `sap_discover_services` describes its search as case-insensitive across service name, title and description, and that was true only on systems whose Gateway *cannot* filter: there the server fetches the whole catalog and sieves locally. Where the Gateway understands the filter — the fast path added for the 1222-service system — the search was passed through as `substringof('term',TechnicalServiceName)`, which SAP evaluates case-sensitively and only across two of the three fields. Since SAP service names are almost always upper case and people type lower case, the same query found nothing on one system and everything on another. Reproduced against the built-in demo Gateway, where `business partner` returned an empty list. The filter now lowercases both sides (`substringof('business partner',tolower(TechnicalServiceName)) or …`) and includes `Description`. A Gateway that does not understand the expression answers 400 or 501 as before and the server falls back to fetching everything and filtering locally — and now remembers that refusal instead of paying for a doomed round trip on every search.
+
 ## [0.4.2] - 2026-08-17
 
 A container image, and the two fields the official MCP Registry asks for.
