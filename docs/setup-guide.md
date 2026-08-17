@@ -344,9 +344,30 @@ A typical n8n workflow using the SAP MCP server:
 
 ## Docker Deployment
 
-A Docker Compose file is provided at the project root (`docker-compose.yml`) for running n8n with guniweb-sap-mcp as an HTTP sidecar.
+### The image
 
-### Quick Start
+```
+ghcr.io/guniweb/guniweb-sap-mcp:<version>
+```
+
+Built **from the published npm package**, not from a separate build path — the container runs the same artifact `npm install` would fetch, so the two cannot drift apart. Inside the image, HTTP transport on port 8808 is the default (`SAP_MCP_TRANSPORT` / `SAP_MCP_PORT`), it runs as the non-root user `node`, carries a health check against `/healthz`, and is published for `linux/amd64` and `linux/arm64` with build provenance and an SBOM.
+
+```bash
+# A first look — mock S/4HANA inside the container, no SAP system needed
+docker run --rm -p 8808:8808 -e SAP_MCP_DEMO=true ghcr.io/guniweb/guniweb-sap-mcp:latest
+
+# Against a real system; anything after the image name is passed to the server
+docker run -d --name sap-mcp -p 8808:8808 --env-file .env \
+  ghcr.io/guniweb/guniweb-sap-mcp:<version> --allow-write
+```
+
+Pin the version in production. `:latest` is right for trying things out, but an unattended pull that swaps the server underneath a running workflow is not a debugging session anyone wants.
+
+**RFC/BAPI is not in the image.** That path needs the SAP NW RFC SDK, which SAP licenses to customers only, so it cannot ship in a public image. OData V2/V4 and IDoc over HTTP/XML are complete. For RFC, install the SDK on the host and run the server from npm (see "Setup for SAP ECC" in the README).
+
+### Quick Start with Compose
+
+A Docker Compose file is provided at the project root (`docker-compose.yml`) for running n8n with guniweb-sap-mcp as an HTTP sidecar. n8n waits for the server's health check before it starts.
 
 1. Copy `docker-compose.yml` to your project directory
 2. Create a `.env` file with your SAP credentials:
@@ -378,6 +399,16 @@ The `sap-mcp` hostname resolves within the Docker network. HTTP transport is req
 ### Using env_file
 
 Instead of inline environment variables in `docker-compose.yml`, you can use an `.env` file. Edit `docker-compose.yml` to uncomment the `env_file` option and remove the `environment` block for the `sap-mcp` service.
+
+### Container settings at a glance
+
+| Setting | Default in the image | Notes |
+|---|---|---|
+| `SAP_MCP_TRANSPORT` | `http` | Same as `--transport`. A flag on the command line wins |
+| `SAP_MCP_PORT` | `8808` | Same as `--port`. Also what the container's health check probes |
+| User | `node` (uid 1000) | A mounted config directory must be writable by this user if you want to run `destinations`/`tokens` inside the container |
+| Health check | `GET /healthz` every 30 s | Skipped when `SAP_MCP_TRANSPORT=stdio`, where there is no endpoint to probe |
+| Write tools | off | Add `--allow-write` after the image name |
 
 ## Security
 

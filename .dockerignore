@@ -1,0 +1,5 @@
+# Der Build holt sein Artefakt aus der npm-Registry und braucht aus diesem
+# Verzeichnis nichts. Alles auszuschließen ist deshalb kein Feintuning, sondern
+# eine Grenze: so kann kein Quellcode versehentlich im Build-Kontext landen —
+# und damit auch nicht in einer Schicht des veröffentlichten Abbilds.
+*

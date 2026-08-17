@@ -1,0 +1,175 @@
+name: Publish container image
+
+# Dieser Lauf gehört ins Schaufenster-Repo guniweb/guniweb-sap-mcp und kommt per
+# scripts/sync-showcase.sh dorthin. Zwei Gründe, warum er nicht im Quell-Repo lebt:
+#
+#   1. Namensraum. Der GITHUB_TOKEN eines Laufs darf nur in den Paket-Namensraum
+#      seines eigenen Eigentümers schreiben. Unter der Organisation `guniweb`
+#      genügt er für ghcr.io/guniweb/… — aus einem Repo unter einem persönlichen
+#      Konto bräuchte es ein PAT.
+#   2. Zuordnung. GitHub verknüpft das Paket mit dem Repo, aus dem es kommt. Das
+#      soll das öffentliche Schaufenster sein, nicht die private Quelle.
+#
+# Das Abbild entsteht ohnehin aus dem veröffentlichten npm-Paket (siehe
+# Dockerfile), nicht aus Quellcode — das Schaufenster braucht dafür nichts, was
+# es nicht hat. Der Lauf hängt am npm-Publish: er wartet, bis die Version in der
+# Registry sichtbar ist, und baut erst dann. Das Release im Schaufenster-Repo,
+# das nach jedem Sync ohnehin angelegt wird, löst ihn aus.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'npm-Version, aus der das Abbild gebaut wird (z. B. 0.4.2)'
+        required: true
+        type: string
+      latest:
+        description: 'Zusätzlich als :latest veröffentlichen'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    # Ein Mehrarchitektur-Build dieses Abbilds dauert regulär unter fünf Minuten.
+    # Die Grenze folgt derselben Regel wie in ci.yml und publish.yml: ein Hänger
+    # soll als Fehlschlag enden, nicht als Rechnung.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Version und Ziel bestimmen
+        id: target
+        env:
+          # Voreinstellung ist der Org-Namensraum; über die Repository-Variable
+          # GHCR_IMAGE umstellbar, falls das Abbild einmal woanders gebaut wird
+          # (siehe Preflight unten).
+          IMAGE_OVERRIDE: ${{ vars.GHCR_IMAGE }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -eo pipefail
+          version="${INPUT_VERSION:-${RELEASE_TAG#v}}"
+          if [ -z "$version" ]; then
+            echo "::error::Keine Version ermittelbar (weder Release-Tag noch Eingabe)."
+            exit 1
+          fi
+          image="${IMAGE_OVERRIDE:-ghcr.io/guniweb/guniweb-sap-mcp}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "Abbild: $image:$version"
+
+      - name: Preflight — Zugriff auf den Ziel-Namensraum
+        env:
+          IMAGE: ${{ steps.target.outputs.image }}
+        run: |
+          set -eo pipefail
+          # Läuft dieser Workflow versehentlich außerhalb der Organisation, scheitert
+          # der Push erst nach dem Build mit einer Berechtigungsmeldung, die den
+          # Grund nicht nennt. Hier steht er stattdessen vorne und sagt ihn.
+          owner="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          target_owner="$(echo "$IMAGE" | cut -d/ -f2)"
+          if [ "$owner" = "$target_owner" ]; then
+            echo "Ziel-Namensraum '$target_owner' gehört diesem Repository."
+            exit 0
+          fi
+          echo "::error::Dieses Repo gehört '$owner', das Abbild soll aber nach '$target_owner'."
+          echo "Der GITHUB_TOKEN eines Laufs schreibt nur in den Namensraum seines eigenen"
+          echo "Eigentümers. Diesen Workflow im Repo guniweb/guniweb-sap-mcp laufen lassen"
+          echo "oder die Repository-Variable GHCR_IMAGE auf ghcr.io/$owner/guniweb-sap-mcp setzen."
+          exit 1
+
+      - name: Auf die Version in der npm-Registry warten
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -eo pipefail
+          # Bei einem Release laufen npm-Publish und dieser Job gleichzeitig los.
+          # Ohne das Warten würde der Build an einer Version scheitern, die es in
+          # der Registry erst eine Minute später gibt.
+          for attempt in $(seq 1 30); do
+            if npm view "guniweb-sap-mcp@${VERSION}" version >/dev/null 2>&1; then
+              echo "guniweb-sap-mcp@${VERSION} ist in der Registry sichtbar (Versuch ${attempt})."
+              exit 0
+            fi
+            echo "Noch nicht da — warte 20 s (Versuch ${attempt}/30)."
+            sleep 20
+          done
+          echo "::error::guniweb-sap-mcp@${VERSION} ist nach 10 Minuten nicht in der npm-Registry aufgetaucht."
+          exit 1
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Marken bestimmen
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.target.outputs.image }}
+          # semver-Marken aus der Version: 0.4.2, 0.4 und (steuerbar) latest.
+          # Kein :main, kein :sha — im Register sollen nur Marken stehen, die
+          # jemand bewusst anziehen kann.
+          tags: |
+            type=semver,pattern={{version}},value=${{ steps.target.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.target.outputs.version }}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' || inputs.latest }}
+
+      - name: Bauen und veröffentlichen
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            PACKAGE_VERSION=${{ steps.target.outputs.version }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Herkunftsnachweis wie beim npm-Paket (dort über --provenance): belegt
+      # überprüfbar, dass genau dieser Lauf dieses Abbild gebaut hat.
+      - name: Herkunft bescheinigen
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ steps.target.outputs.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Rauchtest des veröffentlichten Abbilds
+        env:
+          IMAGE: ${{ steps.target.outputs.image }}
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -eo pipefail
+          # Ein Abbild, das niemand gestartet hat, ist kein veröffentlichtes
+          # Abbild, sondern eine Hoffnung. Der Demo-Modus braucht kein SAP-System,
+          # also lässt sich der Start vollständig prüfen.
+          docker run -d --name smoke -p 8808:8808 -e SAP_MCP_DEMO=true "${IMAGE}:${VERSION}"
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8808/healthz > /dev/null; then
+              echo "Abbild antwortet auf /healthz."
+              docker rm -f smoke > /dev/null
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Das veröffentlichte Abbild antwortet nicht auf /healthz."
+          docker logs smoke || true
+          docker rm -f smoke > /dev/null || true
+          exit 1

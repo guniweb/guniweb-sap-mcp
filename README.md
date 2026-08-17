@@ -92,6 +92,8 @@ The demo starts an in-memory OData V2 gateway on localhost (three services with 
 npm install -g guniweb-sap-mcp
 ```
 
+Or [run it as a container](#run-as-a-container): `docker run --rm -p 8808:8808 -e SAP_MCP_DEMO=true ghcr.io/guniweb/guniweb-sap-mcp:latest`
+
 ### 2. Configure
 
 ```bash
@@ -120,6 +122,27 @@ guniweb-sap-mcp --transport http --port 8808 --allow-write   # writes are OFF by
 # Production: authenticate the MCP endpoint AND the inbound IDoc webhook
 guniweb-sap-mcp --transport http --port 8808 --api-key <mcp-key> --webhook-secret <idoc-secret>
 ```
+
+### Run as a container
+
+```bash
+# Look around first — mock S/4HANA inside the container, no SAP system needed
+docker run --rm -p 8808:8808 -e SAP_MCP_DEMO=true ghcr.io/guniweb/guniweb-sap-mcp:latest
+
+# Against a real system (pin the version in production)
+docker run -d --name sap-mcp -p 8808:8808 --env-file .env \
+  ghcr.io/guniweb/guniweb-sap-mcp:<version>
+
+# Flags go straight to the server — writes stay off unless you say so
+docker run -d -p 8808:8808 --env-file .env \
+  ghcr.io/guniweb/guniweb-sap-mcp:<version> --allow-write
+```
+
+The image is built **from the published npm package**, not from a second build path — what runs in the container is the artifact you would have installed with `npm install`, so the two cannot drift apart. HTTP transport on port 8808 is the default inside the image (`SAP_MCP_TRANSPORT` / `SAP_MCP_PORT`); it runs as a non-root user, answers a health check on `/healthz`, and is published for `linux/amd64` and `linux/arm64` with build provenance.
+
+Not included: **RFC/BAPI**. That path needs the SAP NW RFC SDK, which SAP licenses to customers only and which therefore cannot ship in a public image. Everything else — OData V2/V4, IDoc over HTTP/XML — works. For RFC, install the SDK on the host and run the server from npm ([Setup for SAP ECC](#setup-for-sap-ecc)).
+
+A `docker-compose.yml` that puts n8n next to the server is in the repository.
 
 #### Production hardening
 

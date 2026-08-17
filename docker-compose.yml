@@ -1,0 +1,75 @@
+# =============================================================================
+# n8n + guniweb-sap-mcp Docker Compose
+# =============================================================================
+#
+# Runs n8n with the guniweb-sap-mcp MCP server as an HTTP sidecar.
+#
+# Quick start:
+#   1. Copy this file to your project directory
+#   2. Create a .env file with your SAP credentials (see below)
+#   3. Run: docker compose up
+#
+# The sap-mcp service uses HTTP transport, so n8n connects via URL, not stdio.
+# In the n8n MCP Client node (or the GuniWeb SAP community node), set the URL to:
+#   http://sap-mcp:8808/mcp
+#
+# Want to look around first? Set SAP_MCP_DEMO=true and drop the SAP_* variables:
+# the server then talks to a built-in mock S/4HANA and needs no real system.
+#
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # n8n -- workflow automation platform
+  # ---------------------------------------------------------------------------
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      sap-mcp:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # guniweb-sap-mcp -- SAP S/4HANA MCP server (HTTP sidecar)
+  # ---------------------------------------------------------------------------
+  sap-mcp:
+    # Pin the version in production -- ":latest" is convenient for a first look,
+    # but an unattended pull that changes the server underneath a running
+    # workflow is not something you want to debug on a Monday morning:
+    #   SAP_MCP_VERSION=0.4.2 docker compose up -d
+    image: ghcr.io/guniweb/guniweb-sap-mcp:${SAP_MCP_VERSION:-latest}
+    expose:
+      - "8808"
+    # The image defaults to HTTP transport on 8808 (SAP_MCP_TRANSPORT /
+    # SAP_MCP_PORT), so no command is needed. Add flags here to change behaviour,
+    # e.g. ["--allow-write"] to enable the write tools -- the server is read-only
+    # by default.
+    # command: ["--allow-write"]
+    #
+    # Option A: inline environment variables (replace placeholders)
+    environment:
+      - SAP_BASE_URL=https://your-sap-system.example.com
+      - SAP_AUTH_TYPE=basic
+      - SAP_USERNAME=YOUR_SAP_USER
+      - SAP_PASSWORD=YOUR_SAP_PASSWORD
+      - SAP_CLIENT=100
+    # Option B: use an .env file instead (uncomment and remove environment above)
+    # env_file:
+    #   - .env
+    #
+    # Several SAP systems, or one personal SAP login per person? Mount a config
+    # directory and point the server at a destinations.json; the Admin API can
+    # then manage destinations and tokens over HTTP:
+    # volumes:
+    #   - ./sap-mcp-config:/config
+    # environment:
+    #   - SAP_MCP_DESTINATIONS=/config/destinations.json
+    #   - SAP_MCP_ADMIN_TOKEN=${SAP_MCP_ADMIN_TOKEN}
+    restart: unless-stopped
+
+volumes:
+  n8n_data:

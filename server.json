@@ -1,0 +1,55 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.guniweb/guniweb-sap-mcp",
+  "title": "GuniWeb SAP MCP",
+  "description": "SAP S/4HANA and ECC MCP server: OData V2/V4 discovery and CRUD, IDoc send/receive over HTTP/XML, RFC/BAPI, natural-language queries. Read-only by default, built for n8n and other MCP clients.",
+  "version": "0.4.2",
+  "websiteUrl": "https://github.com/guniweb/guniweb-sap-mcp#readme",
+  "repository": {
+    "url": "https://github.com/guniweb/guniweb-sap-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "guniweb-sap-mcp",
+      "version": "0.4.2",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "SAP_BASE_URL",
+          "description": "Base URL of the SAP system, including any path segment in front of /sap/opu/odata (e.g. https://s4.example.com or https://gateway.example.com/prefix)",
+          "isRequired": true
+        },
+        {
+          "name": "SAP_AUTH_TYPE",
+          "description": "Authentication type: basic, oauth2, apikey, ias, xsuaa, btp-principal, saml-bearer",
+          "default": "basic"
+        },
+        {
+          "name": "SAP_CLIENT",
+          "description": "SAP client (Mandant). Appended to every request — a client-dependent Gateway answers 401 without it",
+          "default": "100"
+        },
+        {
+          "name": "SAP_USERNAME",
+          "description": "SAP user for basic authentication"
+        },
+        {
+          "name": "SAP_PASSWORD",
+          "description": "Password for basic authentication",
+          "isSecret": true
+        },
+        {
+          "name": "SAP_MCP_DEMO",
+          "description": "Set to true to start a built-in mock S/4HANA instead of connecting to a real system. No SAP_* configuration needed — for trying the server out",
+          "default": "false"
+        }
+      ]
+    }
+  ]
+}

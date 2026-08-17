@@ -1,0 +1,83 @@
+name: Publish to MCP Registry
+
+# Dieser Lauf gehört ins Schaufenster-Repo guniweb/guniweb-sap-mcp und wird von
+# dort per scripts/sync-showcase.sh dorthin gebracht. Der Grund ist der
+# Namensraum: die MCP-Registry leitet ihn ausschließlich aus dem OIDC-Token des
+# laufenden Repositories ab (Claim `repository_owner`). Nur ein Lauf unter der
+# Organisation `guniweb` darf also `io.github.guniweb/*` veröffentlichen — ein
+# Lauf im privaten Quell-Repo bekäme den Namensraum des persönlichen Kontos.
+#
+# Der Ablauf ist bewusst manuell: npm-Release passiert im Quell-Repo, und die
+# Registry prüft das Feld `mcpName` in den versionsspezifischen npm-Metadaten.
+# Erst wenn die Version dort liegt, kann hier registriert werden.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version, die bereits auf npm liegt (z. B. 0.4.2)'
+        required: true
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write # für die OIDC-Anmeldung an der Registry
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Vorprüfung — liegt die Version mit mcpName auf npm?
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -eo pipefail
+          # Ohne diese Prüfung scheitert der Publish erst an der Registry, mit
+          # einer Meldung, die nicht sagt, welches der beiden Felder fehlt.
+          expected="$(jq -r '.name' server.json)"
+          actual="$(npm view "guniweb-sap-mcp@${VERSION}" mcpName 2>/dev/null || true)"
+          if [ -z "$actual" ]; then
+            echo "::error::guniweb-sap-mcp@${VERSION} hat kein Feld 'mcpName' auf npm."
+            echo "Das Feld muss VOR dem npm-Release in der package.json stehen; eine"
+            echo "veröffentlichte Version lässt sich nicht nachbessern — es braucht"
+            echo "dann ein neues Release."
+            exit 1
+          fi
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::mcpName auf npm ist '$actual', server.json nennt '$expected'."
+            exit 1
+          fi
+          echo "npm-Metadaten passen: mcpName=$actual"
+
+      - name: mcp-publisher holen
+        run: |
+          set -eo pipefail
+          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+          arch="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${os}_${arch}.tar.gz" \
+            | tar xz mcp-publisher
+          ./mcp-publisher --version || true
+
+      - name: Version in die server.json schreiben
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -eo pipefail
+          # Registry-Versionen sind unveränderlich; jede Veröffentlichung braucht
+          # eine eigene. Der Wert kommt aus der Eingabe, damit die Datei im Repo
+          # nicht bei jedem Release nachgezogen werden muss.
+          jq --arg v "$VERSION" \
+            '.version = $v | (.packages[] | select(.registryType == "npm")).version = $v' \
+            server.json > server.tmp && mv server.tmp server.json
+          cat server.json
+
+      - name: An der Registry anmelden (OIDC)
+        run: ./mcp-publisher login github-oidc
+
+      - name: server.json prüfen
+        run: ./mcp-publisher validate
+
+      - name: Veröffentlichen
+        run: ./mcp-publisher publish

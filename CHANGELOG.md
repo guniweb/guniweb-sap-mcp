@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-08-17
+
+A container image, and the two fields the official MCP Registry asks for.
+
+### Added
+
+- **Container image on GHCR — `ghcr.io/guniweb/guniweb-sap-mcp`.** `docker run --rm -p 8808:8808 -e SAP_MCP_DEMO=true ghcr.io/guniweb/guniweb-sap-mcp:latest` is now a complete first look, and `docker compose up` puts the server next to n8n without an `npm install -g` at every container start. The image is built **from the published npm package**, not from a second build path — what runs in the container is byte for byte the artifact `npm install` would have fetched, so image and package cannot drift apart. HTTP transport on port 8808 is the default inside it, it runs as a non-root user, carries a health check on `/healthz`, and is published for `linux/amd64` and `linux/arm64` with build provenance and an SBOM. RFC/BAPI is deliberately absent: that path needs the SAP NW RFC SDK, which SAP licenses to customers only and which therefore cannot ship in a public image — install it on the host and run the server from npm for RFC. Every published image is started once in CI against the built-in demo before the release finishes.
+- **`SAP_MCP_TRANSPORT` and `SAP_MCP_PORT`** — the equivalents of `--transport` and `--port` as environment variables, same precedence as everywhere else (flag wins, unusable values are ignored rather than fatal). Without them, changing a container's port meant overriding the image command; now a line in the compose file is enough. This is what the image relies on, so a container built on a version before this one would start on stdio and publish a port that never answers.
+- **`mcpName` in package.json and a `server.json`** — the two pieces the official MCP Registry checks when a server is listed. The registry compares `mcpName` in the version-specific npm metadata against the name in `server.json`; both now say `io.github.guniweb/guniweb-sap-mcp`, and a unit test holds them together so a mismatch fails before a release, not after one.
+
+### Changed
+
+- **`docker-compose.yml` now uses the published image** instead of installing the package into a bare `node:22-slim` at every start, waits for the server's health check before starting n8n, and shows how to mount a `destinations.json` for several SAP systems or personal SAP logins.
+
 ## [0.4.1] - 2026-08-17
 
 Diagnosis fix from the first end-to-end run of the personal SAP login with the n8n node.
