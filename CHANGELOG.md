@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-07
+
+Binärdaten: SAP-Media-Entities lassen sich jetzt über den Server hoch- und herunterladen, und ein lesender Funktionsimport funktioniert auf einem Read-only-Zugang.
+
+### Added
+
+- **Binary payloads: `sap_media_upload` and `sap_media_download`.** SAP media entities — attachments, document images, archive documents — carry their payload in the request body, not in JSON, and the server had no way to send it. Anyone needing an attachment had to go around the MCP path with a plain HTTP node and rebuild four things by hand: the certificate chain (an intermediate alone is not enough for Node and OpenSSL, so a root CA credential), the CSRF handshake with cookie forwarding, the `sap-client` parameter, and their own error classification. All four already exist in the server, so they now cover raw bytes too. `sap_media_upload` sends the file name as the `Slug` header and the bytes as the body; `sap_media_download` fetches the bytes over `$value` and returns them as an MCP `resource` blob rather than a base64 string inside JSON. Headers are given as an object, and **empty values are not sent** — a pair list cannot express "leave this one out", and an empty header makes SAP answer with a message that reads like a missing authorisation and is none. File names are made header-safe (`Prüfbericht.pdf` → `Pruefbericht.pdf`) and the answer says so via `slugAdjustedFrom`.
+- **`--max-request-bytes` / `SAP_MCP_MAX_REQUEST_BYTES`, default 16 MB.** The MCP SDK's Express helper registers `express.json()` without a `limit`, which pins the body at Express's 100 kB default — a base64-encoded PDF above roughly 75 kB failed with `413` before SAP was ever contacted, and the helper offers no switch for it. The server now builds its own Express app. A body above the limit is refused as JSON naming the limit, instead of Express's HTML page, which arrives in the n8n node as "Unexpected MCP response body" and sends people looking for the fault in SAP.
+
+### Changed
+
+- **A reading function import now works on a read-only connection.** `sap_function` counted as a write tool wholesale and was therefore invisible whenever the server ran without `--allow-write` or a token carried `policy.readOnly` — including for the reading case. Measured against a customer system on 2026-09-07: a read-only connection got `Tool sap_function disabled` for `GetAllOriginals`, which is the reading path to the attachments of an object and the basis for verifying an upload by reading it back. A function import is not a write operation as such; it can be either. The tool now stays visible and each call is checked against the service metadata: V2 `HttpMethod="GET"` and V4 `$Kind: "Function"` are allowed, a writing import is rejected, and so is a name the metadata does not carry or metadata that cannot be reached. The proof comes from the metadata, never from the call — `httpMethod` and `isFunction` in the arguments have no bearing on the check. What is visible without `--allow-write` still cannot change anything; for `sap_function` that is now demonstrated rather than assumed.
+- **"User has no authorization for operation 03 on object …" now names both causes.** SAP KBA 3421507 lists two, and neither is the authorisation: an object key in the wrong format (it goes out ten digits wide with leading zeros) or a `BusinessObjectTypeName` that does not match the object. The error answer names both, plus the third possibility of confusing headers with query parameters — on a writing POST they are headers, on a reading call query parameters, and either way the message looks like a permission problem.
+
 ### Fixed
 
 - **Catalog search is now case-insensitive everywhere — as the tool always claimed.** `sap_discover_services` describes its search as case-insensitive across service name, title and description, and that was true only on systems whose Gateway *cannot* filter: there the server fetches the whole catalog and sieves locally. Where the Gateway understands the filter — the fast path added for the 1222-service system — the search was passed through as `substringof('term',TechnicalServiceName)`, which SAP evaluates case-sensitively and only across two of the three fields. Since SAP service names are almost always upper case and people type lower case, the same query found nothing on one system and everything on another. Reproduced against the built-in demo Gateway, where `business partner` returned an empty list. The filter now lowercases both sides (`substringof('business partner',tolower(TechnicalServiceName)) or …`) and includes `Description`. A Gateway that does not understand the expression answers 400 or 501 as before and the server falls back to fetching everything and filtering locally — and now remembers that refusal instead of paying for a doomed round trip on every search.
@@ -189,6 +203,7 @@ tool had caused which SAP requests.
 - **Source maps from the published tarball.** `dist/index.js.map` is no longer generated; `package.json#files` is now an explicit 3-path whitelist (`dist`, `README.md`, `LICENSE`). The published tarball no longer leaks TypeScript source via `sourcesContent` (Phase 21).
 
 [unreleased]: https://github.com/guniweb/guniweb-sap-mcp/releases
+[0.5.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.5.0
 [0.3.1]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.3.1
 [0.3.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.3.0
 [0.2.2]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.2.2

@@ -4,12 +4,14 @@ Complete reference for all MCP tools, resources, and prompts provided by the SAP
 
 ## Tools
 
-The server provides **22 tools**, organised in four tiers plus one meta-tool. The `core` and `odata` tiers are active by default; `idoc` and `rfc` are switched on with `--tiers` at startup or with `sap_enable_tools` at runtime. Write tools (marked with \*) are only registered when the server runs with `--allow-write` (or `SAP_MCP_ALLOW_WRITE=true`) — in the default read-only mode they do not appear in `tools/list` at all.
+The server provides **24 tools**, organised in four tiers plus one meta-tool. The `core` and `odata` tiers are active by default; `idoc` and `rfc` are switched on with `--tiers` at startup or with `sap_enable_tools` at runtime. Write tools (marked with \*) are only registered when the server runs with `--allow-write` (or `SAP_MCP_ALLOW_WRITE=true`) — in the default read-only mode they do not appear in `tools/list` at all.
+
+[`sap_function`](#sap_function) is the one exception (marked with \**): it stays visible in read-only mode, because a function import may read or write. Which one it is comes from the service metadata, checked per call — see [Function imports in read-only mode](#function-imports-in-read-only-mode).
 
 | Tier | Tools | Active by default |
 |------|-------|-------------------|
 | `core` | [`test-connection`](#test-connection), [`sap_list_services`](#sap_list_services), [`sap_get_metadata`](#sap_get_metadata), [`sap_discover_services`](#sap_discover_services), [`sap_nl_query`](#sap_nl_query) | Yes |
-| `odata` | [`sap_read`](#sap_read), [`sap_query`](#sap_query), [`sap_create`](#sap_create)\*, [`sap_update`](#sap_update)\*, [`sap_delete`](#sap_delete)\*, [`sap_function`](#sap_function)\*, [`sap_batch`](#sap_batch)\* | Yes |
+| `odata` | [`sap_read`](#sap_read), [`sap_query`](#sap_query), [`sap_create`](#sap_create)\*, [`sap_update`](#sap_update)\*, [`sap_delete`](#sap_delete)\*, [`sap_function`](#sap_function)\**, [`sap_batch`](#sap_batch)\*, [`sap_media_upload`](#sap_media_upload)\*, [`sap_media_download`](#sap_media_download) | Yes |
 | `idoc` | [`sap_idoc_send`](#sap_idoc_send)\*, [`sap_idoc_status`](#sap_idoc_status), [`sap_idoc_discover`](#sap_idoc_discover), [`sap_idoc_list_received`](#sap_idoc_list_received) | No — see [IDoc tools](#idoc-tools) |
 | `rfc` | [`sap_rfc_call`](#sap_rfc_call)\*, [`sap_rfc_metadata`](#sap_rfc_metadata), [`sap_bapi_call`](#sap_bapi_call)\*, [`sap_bapi_commit`](#sap_bapi_commit)\*, [`sap_rfc_search_functions`](#sap_rfc_search_functions) | No — see [RFC/BAPI tools](#rfcbapi-tools) |
 | meta | [`sap_enable_tools`](#sap_enable_tools) | Yes (not registered in read-only mode) |
@@ -611,9 +613,25 @@ Delete an entity from SAP. Provide the entity key. ETag handling is automatic.
 
 ---
 
-### sap_function
+### sap_function \**
 
 Invoke an OData V2 Function Import or V4 Action/Function. Supports bound actions (on a specific entity) and unbound actions/functions.
+
+#### Function imports in read-only mode
+
+A function import is not a write operation as such — it can be either. `GetAllOriginals` reads the attachments of an object; `CreateOriginal` creates one. Treating the tool as write-only hid it entirely from read-only connections, and with it the reading path.
+
+So `sap_function` stays visible in read-only mode, and each call is checked against the service metadata instead:
+
+| What the metadata says | Read-only connection |
+|---|---|
+| V2 `HttpMethod="GET"` | allowed |
+| V4 `$Kind: "Function"` | allowed |
+| V2 `POST` / V4 `Action` | rejected |
+| name not in the metadata | rejected |
+| metadata unreachable | rejected |
+
+The proof comes from the metadata, never from the call: `httpMethod` and `isFunction` in the arguments have no bearing on the check — otherwise the guard could be talked out of it. With `--allow-write` no check runs at all.
 
 | Parameter      | Type                   | Required | Description                                                                                     |
 |---------------|------------------------|----------|-------------------------------------------------------------------------------------------------|
@@ -673,6 +691,105 @@ Invoke an OData V2 Function Import or V4 Action/Function. Supports bound actions
   }
 }
 ```
+
+---
+
+### sap_media_upload \*
+
+Upload a file as raw bytes into a SAP media entity — attachments, document images, archive documents. The file name goes out as the `Slug` header, the bytes go into the body, and the answer comes back as JSON.
+
+This runs over the same HTTP client as every other tool, so the certificate chain, the CSRF handshake, the session cookie and the `sap-client` parameter are handled for you. Doing the same thing with a plain HTTP node means rebuilding all four.
+
+| Parameter       | Type                   | Required | Description |
+|-----------------|------------------------|----------|-------------|
+| `serviceUrl`    | string                 | Yes      | OData service URL |
+| `entitySet`     | string                 | Yes      | Entity set name, e.g., `AttachmentContentSet` |
+| `contentBase64` | string                 | Yes      | File content, base64-encoded. A `data:` prefix is stripped. |
+| `fileName`      | string                 | Yes      | File name; sent as the `Slug` header |
+| `contentType`   | string                 | Yes      | Content type of the file, e.g., `application/pdf` |
+| `headers`       | object (string -> any) | No       | Additional headers. **Empty values are not sent** — see below. |
+
+**Example Request:**
+```json
+{
+  "name": "sap_media_upload",
+  "arguments": {
+    "serviceUrl": "/sap/opu/odata/sap/API_CV_ATTACHMENT_SRV",
+    "entitySet": "AttachmentContentSet",
+    "contentBase64": "JVBERi0xLjcK...",
+    "fileName": "auftragsbestaetigung.pdf",
+    "contentType": "application/pdf",
+    "headers": {
+      "BusinessObjectTypeName": "BUS2032",
+      "LinkedSAPObjectKey": "0000012345",
+      "DocumentInfoRecordDocType": "PDF"
+    }
+  }
+}
+```
+
+**Example Response:**
+```json
+{
+  "uploaded": {
+    "status": 201,
+    "slug": "auftragsbestaetigung.pdf",
+    "bytesSent": 48213,
+    "entity": {
+      "DocumentInfoRecordDocNumber": "10000042",
+      "FileName": "auftragsbestaetigung.pdf",
+      "FileSize": "48213",
+      "MimeType": "application/pdf"
+    }
+  }
+}
+```
+
+**Four things worth knowing:**
+
+1. **Empty headers are omitted, not sent empty.** `"LinkedSAPObjectKey": ""` does not go out as an empty header — the entry is dropped. An empty header makes SAP answer with a message that reads like a missing authorisation and is none.
+2. **The object key goes out ten digits wide with leading zeros** (`0000012345`, not `12345`), and `BusinessObjectTypeName` must match the object (`BUS2032` for a sales order). Getting either wrong produces *"User has no authorization for operation 03 on object …"*. SAP KBA 3421507 names both causes; the server repeats both in its error answer.
+3. **There is no PATCH.** `API_CV_ATTACHMENT_SRV` reports `updatable: 0` across the whole service. A second upload does not replace anything — it attaches a second document to the same object. Check what is there before repeating an upload.
+4. **File names are made header-safe.** HTTP headers are latin1, so `Prüfbericht.pdf` goes out as `Pruefbericht.pdf`. When that happens, the answer carries `slugAdjustedFrom` with the name you passed in.
+
+**Size limit:** the bytes travel base64-encoded inside the JSON-RPC request, because MCP has no binary form for tool *inputs*. The HTTP transport accepts 16 MB of request body by default (roughly a 12 MB file); raise it with `--max-request-bytes` or `SAP_MCP_MAX_REQUEST_BYTES`. Above the limit the server answers `413` as JSON naming the limit.
+
+---
+
+### sap_media_download
+
+Fetch the raw bytes of a media entity over the `$value` path. The bytes come back as an MCP `resource` block with a base64 `blob`, plus a text block with file name, content type and size.
+
+| Parameter          | Type                   | Required | Description |
+|--------------------|------------------------|----------|-------------|
+| `serviceUrl`       | string                 | Yes      | OData service URL |
+| `entitySet`        | string                 | Yes      | Entity set name |
+| `key`              | object (string -> any) | Yes      | Entity key |
+| `withoutValuePath` | boolean                | No       | Request without the trailing `/$value`. Only needed when the service serves the bytes directly under the entity path. |
+
+**Example Request:**
+```json
+{
+  "name": "sap_media_download",
+  "arguments": {
+    "serviceUrl": "/sap/opu/odata/sap/API_CV_ATTACHMENT_SRV",
+    "entitySet": "AttachmentContentSet",
+    "key": { "DocumentInfoRecordDocNumber": "10000042" }
+  }
+}
+```
+
+**Example Response** (two content blocks):
+```json
+{
+  "content": [
+    { "type": "text", "text": "{ \"status\": 200, \"fileName\": \"auftrag.pdf\", \"contentType\": \"application/pdf\", \"bytes\": 48213 }" },
+    { "type": "resource", "resource": { "uri": "sap://AttachmentContentSet/auftrag.pdf", "mimeType": "application/pdf", "blob": "JVBERi0xLjcK..." } }
+  ]
+}
+```
+
+This tool reads, so it stays available in the default read-only mode. For the metadata of an attachment (name, size, who created it) `sap_read` on the same entity is enough — no need to move the bytes.
 
 ---
 

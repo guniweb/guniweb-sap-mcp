@@ -134,6 +134,7 @@ All server behavior can be configured via command-line flags:
 | `--rcvpor <value>` | none | IDoc receiver port |
 | `--rcvprt <value>` | none | IDoc receiver partner type |
 | `--rcvprn <value>` | none | IDoc receiver partner number |
+| `--max-request-bytes <n>` | `16777216` (16 MB) | Largest accepted JSON-RPC body on `/mcp` (also `SAP_MCP_MAX_REQUEST_BYTES`). Decides how large a file `sap_media_upload` may carry — the bytes travel base64-encoded, so 16 MB of body is roughly a 12 MB file. Above the limit the server answers `413` as JSON naming the limit |
 
 #### `--expose` (Selective Entity Set Registration)
 
@@ -439,7 +440,9 @@ Without `--api-key`, the server runs without authentication. This is suitable fo
 
 ## Upgrading to 0.2.2
 
-**The server is read-only by default.** `sap_create`, `sap_update`, `sap_delete`, `sap_function` and `sap_idoc_send` no longer appear in `tools/list` until you pass `--allow-write` (or set `SAP_MCP_ALLOW_WRITE=true`).
+**The server is read-only by default.** `sap_create`, `sap_update`, `sap_delete`, `sap_media_upload` and `sap_idoc_send` no longer appear in `tools/list` until you pass `--allow-write` (or set `SAP_MCP_ALLOW_WRITE=true`).
+
+> Since 0.5.0 `sap_function` is the one exception: it stays visible, and each call is checked against the service metadata. A reading function import (V2 `HttpMethod="GET"`, V4 `Function`) is allowed; everything else — including a name the metadata does not carry — is rejected. See [Function imports in read-only mode](api-reference.md#function-imports-in-read-only-mode).
 
 > This is a breaking change in a patch-level version. It is deliberate: the project is pre-1.0, and shipping a safe default sooner was judged more valuable than the version-number convention.
 

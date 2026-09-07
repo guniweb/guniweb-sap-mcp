@@ -441,3 +441,95 @@ Attempting to use a CRUD operation on a non-exposed entity set returns an error:
 | `A_BusinessPartner*` | `A_BusinessPartner`, `A_BusinessPartnerAddress`, `A_BusinessPartnerBank` | `A_Customer` |
 | `*Order*`            | `A_SalesOrder`, `A_SalesOrderItem`, `A_PurchaseOrderItem` | `A_BusinessPartner` |
 | `A_Sales*,A_Business*` | All Sales and Business entity sets     | `A_Customer`, `A_Supplier` |
+
+---
+
+## Attaching a PDF to a Sales Order
+
+A document attached to a SAP object goes through `API_CV_ATTACHMENT_SRV`. The file travels as raw bytes; everything that identifies the object travels as headers.
+
+### Step 1: Upload the File
+
+```json
+{
+  "name": "sap_media_upload",
+  "arguments": {
+    "serviceUrl": "/sap/opu/odata/sap/API_CV_ATTACHMENT_SRV",
+    "entitySet": "AttachmentContentSet",
+    "contentBase64": "JVBERi0xLjcKJeLjz9MK...",
+    "fileName": "auftragsbestaetigung-4711.pdf",
+    "contentType": "application/pdf",
+    "headers": {
+      "BusinessObjectTypeName": "BUS2032",
+      "LinkedSAPObjectKey": "0000004711",
+      "DocumentInfoRecordDocType": "PDF"
+    }
+  }
+}
+```
+
+Two details decide whether this works:
+
+- `LinkedSAPObjectKey` is **ten digits with leading zeros**. Sales order 4711 is `0000004711`.
+- `BusinessObjectTypeName` must match the object. A sales order is `BUS2032`.
+
+Get either wrong and SAP answers *"User has no authorization for operation 03 on object …"* — which is not about authorisations. The server's error answer names both causes.
+
+**Response:**
+
+```json
+{
+  "uploaded": {
+    "status": 201,
+    "slug": "auftragsbestaetigung-4711.pdf",
+    "bytesSent": 48213,
+    "entity": {
+      "DocumentInfoRecordDocNumber": "10000042",
+      "FileName": "auftragsbestaetigung-4711.pdf",
+      "FileSize": "48213",
+      "MimeType": "application/pdf"
+    }
+  }
+}
+```
+
+### Step 2: Read It Back Instead of Trusting the Status Code
+
+`201` says SAP accepted the request. Whether the attachment hangs on the right object is a different question — ask it:
+
+```json
+{
+  "name": "sap_function",
+  "arguments": {
+    "serviceUrl": "/sap/opu/odata/sap/API_CV_ATTACHMENT_SRV",
+    "functionName": "GetAllOriginals",
+    "parameters": {
+      "BusinessObjectTypeName": "BUS2032",
+      "LinkedSAPObjectKey": "0000004711"
+    }
+  }
+}
+```
+
+This is a reading function import, so it works on a read-only connection too — see [Function imports in read-only mode](api-reference.md#function-imports-in-read-only-mode).
+
+Note the asymmetry: on the **writing** call above, `BusinessObjectTypeName` and `LinkedSAPObjectKey` are *headers*; on this **reading** call they are *parameters*. Mixing the two up produces a message that looks like a missing authorisation in both directions.
+
+### Step 3: Fetch the Bytes Again
+
+```json
+{
+  "name": "sap_media_download",
+  "arguments": {
+    "serviceUrl": "/sap/opu/odata/sap/API_CV_ATTACHMENT_SRV",
+    "entitySet": "AttachmentContentSet",
+    "key": { "DocumentInfoRecordDocNumber": "10000042" }
+  }
+}
+```
+
+The bytes come back as an MCP `resource` blob. In the n8n node they arrive as a binary field on the item.
+
+### Before Repeating an Upload: Look First
+
+`API_CV_ATTACHMENT_SRV` reports `updatable: 0` across the whole service — **there is no PATCH**. Uploading the same file again does not replace the first one; it attaches a second document to the same object. A workflow that retries needs Step 2 before Step 1, not after.
