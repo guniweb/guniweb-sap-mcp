@@ -637,7 +637,7 @@ The proof comes from the metadata, never from the call: `httpMethod` and `isFunc
 |---------------|------------------------|----------|-------------------------------------------------------------------------------------------------|
 | `serviceUrl`   | string                 | Yes      | OData service URL                                                                               |
 | `functionName` | string                 | Yes      | Function import name (V2) or action/function name (V4). For V4 bound operations, use full namespace, e.g., `com.sap.gateway.srvd.ActionName` |
-| `parameters`   | object (string -> any) | No       | Function/action parameters as key-value pairs                                                    |
+| `parameters`   | object (string -> any) | No       | Function/action parameters as key-value pairs. V2: pass plain values — they are typed from `$metadata` (see [Typed literals in V2 URLs](#typed-literals-in-v2-urls)) |
 | `httpMethod`   | `"GET"` or `"POST"`   | No       | HTTP method override. V2: from metadata or defaults to POST. V4: Actions=POST, Functions=GET    |
 | `entitySet`    | string                 | No       | Entity set for V4 bound actions/functions                                                        |
 | `key`          | object (string -> any) | No       | Entity key for V4 bound actions/functions                                                        |
@@ -664,6 +664,58 @@ The proof comes from the metadata, never from the call: `httpMethod` and `isFunc
   "PurchaseOrderStatus": "Released"
 }
 ```
+
+#### Fiori draft services (V2)
+
+Most S/4HANA write services behind Fiori apps — purchase requisition, purchase order, supplier, material — are draft-enabled. Their entities carry two extra key properties, `DraftUUID` (`Edm.Guid`) and `IsActiveEntity` (`Edm.Boolean`), and a document goes through a fixed cycle. With `MM_PUR_PR_PROFNL_MAINTAIN_SRV` as the example:
+
+| Step | Tool | Call |
+|---|---|---|
+| 1. Create a draft | `sap_create` | `entitySet: "C_PurchaseReqnHeader"`, `data: "{}"` → returns `DraftUUID`, `IsActiveEntity: false` |
+| 2. Add an item | `sap_create` | `entitySet: "C_PurchaseReqnHeader(PurchaseRequisition='',DraftUUID=guid'<uuid>',IsActiveEntity=false)/to_PurchaseReqnItem"` |
+| 3. Activate | `sap_function` | `C_PurchaseReqnHeaderActivation` with `{ PurchaseRequisition: "", DraftUUID: "<uuid>", IsActiveEntity: false }` → the active document with its number |
+| 4. Read the active document | `sap_read` | `key: { PurchaseRequisition: "10000411", DraftUUID: "00000000-0000-0000-0000-000000000000", IsActiveEntity: true }` |
+| 5. Edit again | `sap_function` | `C_PurchaseReqnHeaderEdit` with the active key → a new draft with its own `DraftUUID` |
+| 6. Change the draft | `sap_query`, `sap_update` | read the draft items via `C_PurchaseReqnHeader(<draft key>)/to_PurchaseReqnItem`, then `sap_update` `C_PurchaseReqnItem` with the item's key as returned; activate as in step 3 |
+| 7. Delete | `sap_delete` | on the active key |
+
+An active document always has the null GUID `00000000-0000-0000-0000-000000000000` as its `DraftUUID`. **The items of a draft have a `DraftUUID` of their own**, not the header's — updating an item with the header's `DraftUUID` fails with `Change not possible; object does not exist`. Read the item keys through the header's navigation (step 6). Steps 2 and 6 are the places where a key goes into a navigation path by hand; everywhere else, pass plain values.
+
+The whole cycle, including a `MERGE` and a `DELETE` inside `sap_batch` changesets, was run against a real S/4HANA system (S20, client 324) on 2026-09-27.
+
+Up to 0.5.0, steps 3 to 7 failed: the server sent `DraftUUID` as a string and `IsActiveEntity` as `'true'`, and SAP rejected both (`Invalid function import parameter type for 'DraftUUID'. Expected type is 'Edm.Guid'`, `Invalid key predicate type for 'IsActiveEntity'. Expected type is 'Edm.Boolean'`).
+
+**Example Request (V2 draft activation):**
+```json
+{
+  "name": "sap_function",
+  "arguments": {
+    "serviceUrl": "/sap/opu/odata/sap/MM_PUR_PR_PROFNL_MAINTAIN_SRV",
+    "functionName": "C_PurchaseReqnHeaderActivation",
+    "parameters": {
+      "PurchaseRequisition": "",
+      "DraftUUID": "fa492a64-b120-1fd1-aed4-19f97d9f4000",
+      "IsActiveEntity": false
+    }
+  }
+}
+```
+
+#### Typed literals in V2 URLs
+
+SAP checks every value in a key predicate and every function import parameter against its Edm type. The server takes the types from `$metadata` and writes the literal SAP expects:
+
+| Edm type | Sent as | Example |
+|---|---|---|
+| `Edm.String` | quoted, `'` doubled | `'10000411'`, `'O''Neil'` |
+| `Edm.Guid` | `guid'…'` | `guid'fa492a64-b120-1fd1-aed4-19f97d9f4000'` |
+| `Edm.Boolean` | bare | `true` |
+| `Edm.DateTime` | `datetime'…'`, no time zone | `datetime'2026-10-15T00:00:00'` |
+| `Edm.DateTimeOffset` | `datetimeoffset'…'` | `datetimeoffset'2026-10-15T08:30:00Z'` |
+| `Edm.Decimal` / `Edm.Int64` / `Edm.Double` | number with suffix | `5M`, `9007199254740993L`, `1.5d` |
+| `Edm.Int16` / `Edm.Int32` / `Edm.Byte` | bare | `10` |
+
+Because the type decides, a number passed for an `Edm.String` key is still quoted, and a value already written as `guid'…'` is not wrapped twice. Without metadata, the JavaScript value decides: booleans and numbers bare, a GUID-shaped string as `guid'…'`, everything else quoted. This applies to `sap_read`, `sap_update`, `sap_delete`, `sap_function` and `sap_batch` on V2 services.
 
 **Example Request (V4 Bound Action):**
 ```json
@@ -796,6 +848,15 @@ This tool reads, so it stays available in the default read-only mode. For the me
 ### sap_batch
 
 Execute multiple OData operations in a single batch request. Supports V2 (multipart/mixed) and V4 (JSON) batch formats automatically. Operations can be grouped into changesets for transactional behavior. Returns per-operation status — individual failures are always reported, never hidden behind the batch HTTP 200.
+
+Results come back in the order of `operations`. For V2:
+
+- Write operations always run inside a changeset. Operations with the same `changesetId` share one; a write without `changesetId` gets its own. `get` operations run outside changesets.
+- If SAP rejects a changeset as a whole, it answers with a single error. That error is reported on every operation of the changeset — none of them took effect.
+- `patch` is sent as `MERGE`, and `patch` and `delete` carry `If-Match` (`__etag` from `data`, otherwise `*`).
+- Keys are typed from `$metadata`, as for the single-entity tools — see [Typed literals in V2 URLs](#typed-literals-in-v2-urls).
+
+Up to 0.5.0 every V2 batch failed on SAP with `The Data Services Request could not be understood due to malformed syntax`: the request headers of a part without a body were not closed by a blank line, and `changesetId` was not passed on for V2.
 
 | Parameter    | Type   | Required | Description |
 |-------------|--------|----------|-------------|
