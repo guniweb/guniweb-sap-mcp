@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-01
+
+`sap_function` liefert bei V2-Function-Imports mit Listenrückgabe jetzt alle Datensätze statt nur den ersten. Das ändert die Form der Antwort, daher eine neue Minor-Version. OData-V4-Dienste bekommen getypte Literale und ihre Metadaten als XML. Veröffentlicht wird erstmals per Trusted Publishing.
+
+### Changed
+
+- **Veröffentlichung auf npm über Trusted Publishing statt eines Tokens (#63).** npm schränkt Tokens, die die Zwei-Faktor-Anmeldung umgehen, fürs direkte Veröffentlichen ein. Genau so eines trug der Release-Workflow. Er meldet sich jetzt per OIDC an: npm tauscht das kurzlebige Identitätstoken des Laufs gegen eine Publish-Berechtigung, ein dauerhaftes Geheimnis gibt es nicht mehr. Der Workflow hebt npm dafür auf mindestens 11.5.1, denn npm 10, wie es Node 22 mitbringt, kann kein OIDC, und die Registry antwortet dann mit einem irreführenden 404. Provenance wird ausdrücklich nicht angefordert, weil npm sie aus einem privaten Quell-Repository nicht erzeugt und der Publish sonst mit 422 abbricht.
+
+- **Die Größengrenzen des Pakets fangen jetzt, wofür sie da sind (#64).** Das Bundle darf entpackt höchstens 260 KB und gepackt höchstens 100 KB groß sein. Beide Grenzen sollten ein versehentlich eingebündeltes Paket bemerken, schlugen aber zunehmend bei gewachsenem eigenem Code an: 0.5.1 lag bei 99,3 KB gepackt, der V4-Fix (#65) riss die 260 KB. Eine Messung per esbuild-Metafile ergab null Eingaben aus `node_modules`. Neu prüft `tests/build/minify-safety.build.ts`, dass jeder Paketimport des Quellcodes im Bundle als externer Import stehen bleibt. Wird ein Paket eingebündelt, verschwindet sein Import, und der Test nennt es beim Namen, gleich wie groß es ist. Gegengeprobt mit eingebündeltem `minimatch`. Die Größengrenzen stehen damit großzügiger bei 400 KB entpackt und 150 KB gepackt, in `tarball-shape.build.ts` (greift schon im PR-Lauf) und gleichlautend in `publish.yml`. Außerdem baut der Build-Test-Helfer jetzt auch neu, wenn sich `tsup.config.ts` oder `package.json` ändern, nicht nur `src/`.
+
+### Fixed
+
+- **V2-Function-Imports mit Listenrückgabe lieferten nur den ersten Datensatz.** `sap_function` gab bei OData V2 aus jeder Antwort nur `results[0]` zurück, auch wenn der Function-Import laut `$metadata` eine Liste liefert (`ReturnType="Collection(...)"`). `GetAllOriginals` aus `API_CV_ATTACHMENT_SRV` meldete bei einem Beleg mit mehreren Anhängen stillschweigend nur einen. Eine Collection kommt jetzt vollständig als `{ "results": [...] }` zurück, Datumswerte und `__metadata` werden je Datensatz behandelt wie bisher. Ohne Metadaten entscheidet die Form der Antwort (`d.results` oder `d` als Array). **Verhaltensänderung:** Wer bisher bei einer Listenrückgabe das Objekt des ersten Datensatzes erwartet hat, bekommt jetzt die Hülle mit allen Datensätzen. Einzelrückgaben (Entity, Complex Type) bleiben unverändert das Objekt selbst. Nicht betroffen sind `create` und der Medien-Upload, die immer genau einen Datensatz zurückbekommen.
+
+- **OData-V4-Dienste bekamen dieselben falschen Literale wie V2 bis 0.5.1, und an SAP gar keine Metadaten (#65).** Drei zusammenhängende Fehler: Der V4-Formatierer setzte jede Zeichenkette in Apostrophe, auch eine GUID, die in V4 **nackt** steht (`TravelUUID=fa49…`), und maskierte enthaltene Apostrophe nicht. Die Parameter von V4-Functions liefen durch dieselbe Regel, ein `Edm.Date` wurde zu `'2026-10-15'`. RAP-Draft-Services (Schlüssel `<UUID>` + `IsActiveEntity`) waren damit per Schlüssel nicht adressierbar. Die Typen dafür hätten im `$metadata` gestanden, aber der Server las V4-Metadaten nur als JSON. SAP liefert sie als XML, und XML-CSDL ist für V4 die Pflichtform. Die Versionserkennung hielt einen Dienst mit `<edmx:Edmx Version="4.0">` sogar für V2 und schickte ihn über den V2-Client.
+
+  Neu sind ein V4-Formatierer (`src/odata/v4/v4-literal.ts`), der die Typen aus dem `$metadata` nimmt (`Edm.Guid`, `Edm.Date`, `Edm.DateTimeOffset`, Zahlen nackt, `Edm.String` mit verdoppeltem Apostroph, `duration'…'`), und ein Parser für V4-Metadaten als XML (`v4-metadata-xml-parser.ts`, samt Capabilities aus Inline- und `Annotations`-Blöcken). Der V4-Client fordert das `$metadata` als XML an und liest JSON-CSDL, wo ein Dienst es trotzdem liefert. Die Versionserkennung liest die Version am Wurzelelement. Ohne Metadaten gilt eine GUID-förmige Zeichenkette in V4 weiter als Zeichenkette, denn ob ein Dienst sie als `Edm.Guid` oder `Edm.String` führt, weiß nur das `$metadata`. Die Typhilfen für V2 und V4 liegen gemeinsam in `src/odata/edm-types.ts`.
+
+  Ein Integrationstest (`tests/integration/v4-draft-literals.integration.ts`) spielt einen RAP-Draft über die MCP-Werkzeuge durch: aktivieren, lesen, bearbeiten, ändern, erneut aktivieren, löschen, dazu eine gebundene Function mit Datum, GUID und Zeichenkette, Löschen per Batch und die Metadaten aus dem XML. Das nachgestellte Gateway liefert sein `$metadata` als XML wie SAP. Gegen den alten Code schlägt jeder Fall fehl. **Nicht gegen ein echtes System geprüft:** Auf S20 und S22 ist kein V4-Dienst veröffentlicht, auch der V4-Katalog nicht.
+
 ## [0.5.1] - 2026-09-27
 
 Schreiben in Fiori-Draft-Services (BANF, Bestellung, Lieferant, Material) funktioniert jetzt vollständig, `sap_batch` läuft gegen echte V2-Gateways, und das Protokoll enthält keine Zugangsdaten und personenbezogenen Werte mehr.
@@ -229,6 +249,7 @@ tool had caused which SAP requests.
 - **Source maps from the published tarball.** `dist/index.js.map` is no longer generated; `package.json#files` is now an explicit 3-path whitelist (`dist`, `README.md`, `LICENSE`). The published tarball no longer leaks TypeScript source via `sourcesContent` (Phase 21).
 
 [unreleased]: https://github.com/guniweb/guniweb-sap-mcp/releases
+[0.6.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.6.0
 [0.5.1]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.5.1
 [0.5.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.5.0
 [0.3.1]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.3.1

@@ -3,7 +3,7 @@
   "name": "io.github.guniweb/guniweb-sap-mcp",
   "title": "GuniWeb SAP MCP",
   "description": "SAP S/4HANA and ECC: OData V2/V4, IDoc and RFC/BAPI for n8n and other MCP clients",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "websiteUrl": "https://github.com/guniweb/guniweb-sap-mcp#readme",
   "repository": {
     "url": "https://github.com/guniweb/guniweb-sap-mcp",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "guniweb-sap-mcp",
-      "version": "0.5.1",
+      "version": "0.6.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

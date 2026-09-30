@@ -665,6 +665,17 @@ The proof comes from the metadata, never from the call: `httpMethod` and `isFunc
 }
 ```
 
+**Collection results (V2):** A function import declared with `ReturnType="Collection(...)"` in `$metadata` returns every record, wrapped as `{ "results": [...] }` — for example `GetAllOriginals` of `API_CV_ATTACHMENT_SRV` with all attachments of a document. Without metadata, the shape of the response decides (`d.results` or `d` as an array). A single entity or complex value is returned as the object itself, as above. Up to 0.5.1, a collection result was cut down to its first record.
+
+```json
+{
+  "results": [
+    { "DocumentInfoRecordDocNumber": "10000001", "FileName": "anhang-1.pdf" },
+    { "DocumentInfoRecordDocNumber": "10000002", "FileName": "anhang-2.pdf" }
+  ]
+}
+```
+
 #### Fiori draft services (V2)
 
 Most S/4HANA write services behind Fiori apps — purchase requisition, purchase order, supplier, material — are draft-enabled. Their entities carry two extra key properties, `DraftUUID` (`Edm.Guid`) and `IsActiveEntity` (`Edm.Boolean`), and a document goes through a fixed cycle. With `MM_PUR_PR_PROFNL_MAINTAIN_SRV` as the example:
@@ -716,6 +727,39 @@ SAP checks every value in a key predicate and every function import parameter ag
 | `Edm.Int16` / `Edm.Int32` / `Edm.Byte` | bare | `10` |
 
 Because the type decides, a number passed for an `Edm.String` key is still quoted, and a value already written as `guid'…'` is not wrapped twice. Without metadata, the JavaScript value decides: booleans and numbers bare, a GUID-shaped string as `guid'…'`, everything else quoted. This applies to `sap_read`, `sap_update`, `sap_delete`, `sap_function` and `sap_batch` on V2 services.
+
+#### Typed literals in V4 URLs
+
+OData V4 writes literals differently. A GUID, a date and a number are bare, and only strings and a few prefixed types carry quotes. The server applies the V4 rules to keys, to the parameters of V4 functions and to keys inside `sap_batch`:
+
+| Edm type | Sent as | Example |
+|---|---|---|
+| `Edm.String` | quoted, `'` doubled | `'EUR'`, `'O''Neil'` |
+| `Edm.Guid` | bare | `TravelUUID=fa492a64-b120-1fd1-aed4-19f97d9f4000` |
+| `Edm.Boolean` | bare | `IsActiveEntity=false` |
+| `Edm.Date` | bare | `ValidOn=2026-10-15` |
+| `Edm.DateTimeOffset` | bare, with time zone | `2026-10-15T08:30:00Z` |
+| `Edm.Decimal` / `Edm.Int32` / `Edm.Double` | bare, no suffix | `5`, `1.5` |
+| `Edm.Duration` | `duration'…'` | `duration'PT8H30M'` |
+
+Without metadata, booleans and numbers are bare and everything else is quoted. A GUID-shaped string is **not** assumed to be `Edm.Guid` then: only the metadata can tell whether a service declares it as `Edm.Guid` or `Edm.String`. Action parameters go into the JSON body and need no literals.
+
+The types come from the service's `$metadata`. For V4, SAP serves it as XML, the mandatory CSDL format; the server reads XML and, where a service offers it, JSON CSDL. Up to 0.5.1 V4 metadata was read as JSON only, and a service answering with XML (`<edmx:Edmx Version="4.0">`) was even taken for a V2 service.
+
+**Example Request (V4 RAP draft — activate):**
+```json
+{
+  "name": "sap_function",
+  "arguments": {
+    "serviceUrl": "/sap/opu/odata4/sap/zui_travel/srvd/sap/zui_travel/0001",
+    "functionName": "com.sap.gateway.srvd.zui_travel.v0001.Activate",
+    "entitySet": "Travel",
+    "key": { "TravelUUID": "fa492a64-b120-1fd1-aed4-19f97d9f4000", "IsActiveEntity": false }
+  }
+}
+```
+
+In RAP, the draft and the active instance share the same key UUID and differ only in `IsActiveEntity`.
 
 **Example Request (V4 Bound Action):**
 ```json
