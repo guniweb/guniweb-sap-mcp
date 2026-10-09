@@ -18,6 +18,18 @@ The server provides **24 tools**, organised in four tiers plus one meta-tool. Th
 
 Every tool declares MCP annotations. Read tools carry `readOnlyHint: true`; write tools carry `readOnlyHint: false`, and `sap_delete`, `sap_batch` and `sap_bapi_commit` additionally `destructiveHint: true`.
 
+### Stability of tool names and schemas
+
+Tool names and input schemas are a contract with deterministic clients: the [GuniWeb SAP n8n node](https://www.npmjs.com/package/n8n-nodes-guniweb-sap) and workflows with fixed arguments. The rules:
+
+| Change | Version | CHANGELOG |
+|---|---|---|
+| New tool, new **optional** parameter, wider accepted values | minor | under *Added* |
+| Tool removed or renamed, parameter removed or renamed, type changed, optional parameter becomes required | **major** (before 1.0: minor, never a patch) | under *Breaking*, with the migration step |
+| Description text, annotations, error wording | any | if it matters to users |
+
+A test (`tests/unit/mcp/tool-contract.test.ts`) compares the names and schemas the server serves through `tools/list` with a committed snapshot. Every change to the contract therefore shows up in review as a diff of `tests/fixtures/tool-contract.json`.
+
 ---
 
 ### Core tools
@@ -1602,6 +1614,31 @@ Every tool call emits one log line on completion, and every SAP request it trigg
 ```
 
 `outcome` is `ok`, `error`, `timeout` (budget expired) or `aborted` (client disconnected). A single `grep` on the id shows everything one call did — including how many SAP requests it produced.
+
+### Tracing across systems: `traceparent`
+
+A caller can tie a tool call to its own trace with a [W3C Trace Context](https://www.w3.org/TR/trace-context/#traceparent-header) header on the HTTP request to `/mcp`:
+
+```
+traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+```
+
+The trace id then appears next to the correlation id in the tool's log line, and on each SAP request the call triggered:
+
+```json
+{"correlationId":"a3f19c8b2d04","traceId":"4bf92f3577b34da6a3ce929d0e0e4736","parentId":"00f067aa0ba902b7","tool":"sap_query","outcome":"ok","durationMs":412,"sapCalls":1,"resultBytes":2210}
+```
+
+A `grep` on the trace id leads from the caller's own log to the tool call; the correlation id from there leads to every SAP request.
+
+| Rule | Detail |
+|---|---|
+| Format check only | Version `00`: `00-<32 hex>-<16 hex>-<2 hex>`, lower case, ids not all zero. A later version may append fields after the flags; version `ff` is invalid |
+| Invalid header | Ignored, never rejected. The call runs normally, the log line has no `traceId`. The same goes for a header sent more than once |
+| Logging only | The trace id never influences a decision, is not returned to the client and is **not** forwarded to SAP |
+| Where it is read | The HTTP header first, then `_meta.traceparent` of the request — the place the MCP specification 2026-07-28 defines for trace context ([SEP-414](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/414)). The `_meta` path also works over stdio, which has no headers |
+
+The [GuniWeb SAP n8n node](https://www.npmjs.com/package/n8n-nodes-guniweb-sap) sets the header from its optional `traceparent` parameter.
 
 ---
 

@@ -173,6 +173,8 @@ Every tool call logs one line on completion, carrying a correlation id that also
 
 `grep a3f19c8b2d04` then shows the full story of that one call — including how many SAP requests it produced. `outcome` is one of `ok`, `error`, `timeout` (budget expired) or `aborted` (client disconnected).
 
+Send a W3C `traceparent` header with the request, and its trace id appears in the same line as `traceId`, so a job can be followed from the calling application through n8n to the SAP request. The header is only logged. An invalid one is ignored, and it is never forwarded to SAP ([details](docs/api-reference.md#tracing-across-systems-traceparent)).
+
 **`level: 50` means something is actually wrong.** Expected non-2xx responses — the `404`s from the catalog path probing and from the V4 catalog attempt on systems that have none — are logged at `info` with `"expected": true`, not at `error`. Measured on a production system: over 96 hours of runtime that false alarm was the *only* error-level entry in the log. Alerting on `level: 50` is therefore meaningful; before, it produced nothing but noise.
 
 #### When something breaks
@@ -291,6 +293,8 @@ curl -H "$A" -X DELETE "$U/destinations/s4test?force=true"      # remove; withou
 - **Effective immediately.** Every write validates like the CLI, writes atomically and reloads the running configuration before answering (`"reloaded": true`). If the server cannot load what was written — typically a `${VAR}` that only your shell knows, written with `?allowMissingEnv=true` — the answer says `"reloaded": false` with the errors, and the last valid configuration stays in force.
 - **Bootstrap without any SAP configuration.** With `--admin-token` the server starts even if `destinations.json` does not exist yet and no `SAP_*` is set: `/mcp` answers `503` until the first destination (and a token, or a destination named `default`) has been created through the API. `docker run … -e SAP_MCP_ADMIN_TOKEN=… -e SAP_MCP_DESTINATIONS=/config/destinations.json` is a complete first start.
 - Put the API behind the same reverse proxy/TLS as `/mcp`; the admin secret travels as a Bearer header like any other credential.
+
+**Rotating tokens and SAP passwords** — step by step, with what needs a restart and what does not: [Setup Guide → Rotating credentials](docs/setup-guide.md#rotating-credentials).
 
 ### 4. Use with n8n
 

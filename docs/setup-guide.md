@@ -241,6 +241,8 @@ guniweb-sap-mcp --transport sse --port 8808
 
 SSE is supported for backward compatibility. Prefer HTTP (Streamable HTTP) for new deployments.
 
+> **Deprecated:** `--transport sse` will be removed in 0.8.0, together with the move to the MCP specification 2026-07-28 (which deprecates HTTP+SSE). Switch to `--transport http`.
+
 ## Running the Server
 
 ### stdio (default)
@@ -437,6 +439,61 @@ Without `--api-key`, the server runs without authentication. This is suitable fo
 - Docker internal networks where the port is not exposed to the host
 - Development and testing environments
 - Environments where authentication is handled by a reverse proxy
+
+### Rotating credentials
+
+Two kinds of secrets need rotating: the **Bearer tokens** n8n uses to reach the server, and the **SAP passwords** the server uses to reach SAP. Tokens rotate without any interruption. A password referenced as `${VARIABLE}` needs the container re-created; written directly into `destinations.json`, it is picked up by hot reload as well.
+
+The commands below use the CLI. In Docker, prefix them with `docker compose exec sap-mcp`. The [Admin API](../README.md) offers the same operations over HTTP (`POST /admin/tokens`, `DELETE /admin/tokens/:ref`, `PUT /admin/destinations/:name`).
+
+#### Bearer token (no restart)
+
+Old and new token are valid side by side until step 4, so no workflow fails during the switch.
+
+1. **Issue the new token** with the same destination and policy as the old one, and a label that tells the two apart, e.g. with the date. Labels are not unique, and step 4 revokes by label:
+   ```bash
+   guniweb-sap-mcp tokens list                               # note destination and policy of the old token
+   guniweb-sap-mcp tokens issue s4prod --label "n8n prod 2026-10" --read-only --tiers core,odata
+   #   → the plain token, printed ONCE on stdout
+   ```
+2. **Hash stored:** nothing to do. `tokens issue` writes only the SHA-256 hash to `destinations.json`, and the running server loads it on the next request. Check with `tokens list` that the new entry shows as `active`.
+3. **Switch n8n:** put the new token into the n8n Bearer Auth credential (MCP Client node or GuniWeb SAP node) and save. Every workflow using that credential takes it from its next run.
+4. **Revoke the old token**, by its label or at least 8 hex characters of its hash:
+   ```bash
+   guniweb-sap-mcp tokens revoke "n8n prod 2026-04"
+   ```
+   It is rejected from the next request on, without a restart.
+5. **Verify:** one workflow run (or `test-connection`) succeeds with the new token, and a request with the old one gets `401`:
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8808/mcp \
+     -H "Authorization: Bearer $OLD_TOKEN" -H 'Content-Type: application/json' -d '{}'
+   #   → 401
+   ```
+   Failed attempts count towards the per-address limit (`429` after 10 per minute); one check is enough.
+
+The static `--api-key` and the admin secret (`--admin-token` / `SAP_MCP_ADMIN_TOKEN`) are fixed when the process starts: change the value in the compose file or `.env` and re-create the container (see below). For rotation without interruption, use tokens instead of the static key.
+
+#### SAP password of a `basic` destination
+
+Where the password lives decides what has to be reloaded:
+
+| Password stored as | Where | To take effect |
+|---|---|---|
+| `${VARIABLE}` in `destinations.json` (recommended) | `.env` / `env_file` / Docker secret | **Re-create the container**: `docker compose up -d sap-mcp`. `docker compose restart` does **not** re-read `.env`, and a hot reload of the file resolves `${…}` against the environment the process started with |
+| `SAP_PASSWORD` (single-system setup without `destinations.json`) | `.env` / environment | Re-create the container, as above |
+| Plain value in `destinations.json` | the file itself (keep it `0600`) | Hot reload, no restart: `destinations add <name> --replace … --password '<new>'` or `PUT /admin/destinations/<name>` |
+
+**Order matters**, because SAP locks a user after a few failed logons (`login/fails_to_user_lock`, default 5):
+
+1. Back up the current state: `cp .env .env.bak.$(date +%F)`.
+2. Change the password in SAP (SU01 by the basis team, or the user's own change).
+3. Put the new value into `.env` right away. Use single quotes around a value with special characters, and no spaces around `=`.
+4. Re-create the container: `docker compose up -d sap-mcp`. Or use the hot-reload path for a plain value in the file.
+5. **Verify:** the startup log shows `Selbsttest bestanden` for the destination (`docker compose logs --tail 20 sap-mcp`), and a `test-connection` call from n8n succeeds.
+
+Between steps 2 and 4 every SAP call fails with `401` and counts as a failed logon. Do not start workflows in that window. If `401` persists with the right password, the user is probably locked: have it unlocked in SU01 instead of retrying. A rollback (`cp .env.bak.<date> .env && docker compose up -d sap-mcp`) only helps as long as the old password is still valid in SAP.
+
+For `oauth2`, `apikey` and the other auth types the same rule applies: a secret referenced as `${VARIABLE}` changes with the environment, so re-create the container. A value in the file changes by hot reload. `user-basic` stores no password on the server; the person changes it in their own n8n credential.
 
 ## Upgrading to 0.2.2
 

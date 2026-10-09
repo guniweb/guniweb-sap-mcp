@@ -4,8 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Breaking changes to tool names or input schemas only come with a major version (before 1.0: a minor version, never a patch) and an entry under *Breaking*. See [API Reference → Stability of tool names and schemas](docs/api-reference.md#stability-of-tool-names-and-schemas).
 
 ## [Unreleased]
+
+## [0.7.0] - 2026-10-09
+
+Ein Auftrag lässt sich jetzt per `traceparent` von der aufrufenden Anwendung bis zur SAP-Anfrage im Server-Log verfolgen. Dazu kommen ein Test, der Namen und Schemas der Werkzeuge festhält, und eine Schrittfolge für die Rotation von Zugangsdaten. Keine Verhaltensänderung für bestehende Aufrufer.
+
+### Added
+
+- **`traceparent` (W3C Trace Context) im Protokoll (#72).** Schickt der Aufrufer einen gültigen `traceparent`-Header an `/mcp`, stehen `traceId` und `parentId` in der Logzeile des Werkzeugaufrufs neben der `correlationId`, die `traceId` zusätzlich an jedem SAP-Aufruf, den dieser Aufruf auslöst. So lässt sich ein Auftrag mit einem `grep` von der aufrufenden Anwendung über n8n bis zur SAP-Anfrage verfolgen. Gelesen wird zuerst der HTTP-Header, dann `_meta.traceparent` der Anfrage. Dort legt die MCP-Spezifikation 2026-07-28 Trace Context ab, und dieser Weg geht auch über stdio. Geprüft wird nur das Format. Ein ungültiger oder mehrfach gesendeter Header wird ignoriert, nicht abgewiesen. Der Wert dient nur dem Protokoll: Er entscheidet nichts, geht nicht in die Antwort und nicht an SAP.
+
+- **Werkzeugvertrag als Test (#74).** `tests/unit/mcp/tool-contract.test.ts` vergleicht Namen und Eingabeschemas aller 19 Werkzeuge (ohne RFC), wie der Server sie über `tools/list` ausliefert, mit `tests/fixtures/tool-contract.json`. Eine Änderung am Vertrag fällt damit im Review als Diff auf, statt einen deterministischen Client still zu brechen. Die Regel dazu steht in der API-Referenz: Breaking Changes an Werkzeugen nur mit Hauptversion (vor 1.0: Minor, nie Patch) und einem Eintrag unter *Breaking*.
+
+### Deprecated
+
+- **`--transport sse` entfällt in 0.8.0.** Der alte HTTP+SSE-Transport (`GET /sse`, `POST /message`) ist in der MCP-Spezifikation 2026-07-28 veraltet, und das SDK v2, auf das 0.8.0 umsteigt, enthält ihn nicht mehr. Wer ihn nutzt, stellt auf `--transport http` (Streamable HTTP, `/mcp`) um. Der n8n-Node spricht ohnehin nur `/mcp`.
+
+### Documentation
+
+- **Rotation von Zugangsdaten als Schrittfolge (#75).** Neuer Abschnitt im Setup-Guide, „Rotating credentials“: Ein Bearer-Token wird ohne Unterbrechung gewechselt (neu ausstellen, n8n umstellen, altes widerrufen, prüfen). Beim SAP-Passwort einer `basic`-Destination steht, wo es liegt und was jeweils neu geladen werden muss. Ein `${VARIABLE}`-Verweis braucht einen neu erstellten Container, weil `docker compose restart` die `.env` nicht neu liest. Ein Wert direkt in der Datei wirkt per Hot Reload. Dazu die Reihenfolge, damit SAP den Benutzer nicht sperrt.
 
 ## [0.6.0] - 2026-10-01
 
@@ -249,6 +268,7 @@ tool had caused which SAP requests.
 - **Source maps from the published tarball.** `dist/index.js.map` is no longer generated; `package.json#files` is now an explicit 3-path whitelist (`dist`, `README.md`, `LICENSE`). The published tarball no longer leaks TypeScript source via `sourcesContent` (Phase 21).
 
 [unreleased]: https://github.com/guniweb/guniweb-sap-mcp/releases
+[0.7.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.7.0
 [0.6.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.6.0
 [0.5.1]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.5.1
 [0.5.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.5.0
