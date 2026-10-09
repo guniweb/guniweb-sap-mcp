@@ -9,7 +9,6 @@ graph TB
     subgraph Transport["Transport Layer"]
         stdio["stdio"]
         http["Streamable HTTP"]
-        sse["SSE"]
         apikey["Auth Guard<br/><i>API key or destination token</i>"]
         dest["DestinationStore<br/><i>destinations.json, hot reload</i>"]
         userctx["UserContext Extraction<br/><i>JWT &rarr; sub, email, name</i>"]
@@ -358,8 +357,8 @@ src/
 │   ├── tool-registry.ts        # 4-tier visibility manager + token-policy ceiling
 │   ├── resources/              # MCP resources (metadata, schema, routing)
 │   └── prompts/                # Pre-built conversation starters
-└── transport/                  # HTTP/SSE server
-    └── http-server.ts          # Streamable HTTP + SSE, api-key/token auth, per-destination caches
+└── transport/                  # HTTP server
+    └── http-server.ts          # Streamable HTTP, api-key/token auth, per-destination caches
 ```
 
 ## Key Design Decisions

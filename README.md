@@ -66,7 +66,7 @@ graph TB
 ```
 
 ### Infrastructure
-- **Three Transport Modes** -- stdio, Streamable HTTP, SSE
+- **Two Transport Modes** -- stdio and Streamable HTTP (the legacy SSE transport was removed in 0.8.0)
 - **Named destinations (0.3.0)** -- one server, several SAP systems; a Bearer token per n8n credential selects the system and its permissions. Static API key still supported
 - **Docker Ready** -- Docker Compose for n8n + SAP MCP sidecar
 - **Zero telemetry** -- the server talks to the SAP/BTP endpoints you configure and to nothing else. No usage statistics, no update checks, no crash reports
@@ -197,7 +197,7 @@ If `SAP_TLS_VERIFY=false` is in effect, **every tool result** carries a warning 
 
 Clients that *require* a session id — they read `mcp-session-id` from the initialize response and send it back on subsequent requests — will fail against this server. The n8n MCP Client, Claude Desktop, and the MCP Inspector all work without it.
 
-The legacy `--transport sse` mode is different: it keeps a per-connection session and expects a `?sessionId=` query parameter on `/messages`. Prefer `http` for new setups.
+The legacy `--transport sse` mode was removed in 0.8.0; use `http`.
 
 #### Several SAP systems: `destinations.json`
 
@@ -410,7 +410,7 @@ graph TB
     end
 
     subgraph Server["guniweb-sap-mcp"]
-        Transport["Transport<br/>stdio | HTTP | SSE"]
+        Transport["Transport<br/>stdio | HTTP"]
         UserCtx["UserContext<br/>Extraction"]
         Registry["ToolRegistryManager<br/>Core | OData | IDoc"]
         Tools["17 MCP Tools<br/>3 Resources &bull; 3 Prompts"]

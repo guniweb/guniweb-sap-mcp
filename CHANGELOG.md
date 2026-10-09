@@ -8,6 +8,18 @@ Breaking changes to tool names or input schemas only come with a major version (
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-10
+
+Der Server bekommt eine Erweiterungsschnittstelle für das separat lizenzierte GuniWeb Governance-Modul (Aufrufjournal). Ohne Modul ändert sich nur eine Startzeile und das Feld `governance` in `/healthz`. **Breaking:** `--transport sse` ist entfernt, wie in 0.7.0 angekündigt. Wer es nutzte, stellt auf `--transport http` um.
+
+### Added
+
+- **Erweiterungsschnittstelle für ein Governance-Modul.** Der Server meldet jeden Werkzeugaufruf nach seinem Ende genau einmal an ein optional geladenes Modul: mit `correlationId`, `traceId`, Art (lesend/schreibend, bei Funktionsimporten nach dem tatsächlich an SAP gesendeten Aufruf), Ergebnis, Destination und der Identität des Aufrufers (Token-Label, SAP-Benutzer, geprüftes Benutzer-JWT, ausdrücklich ob ein Personenbezug vorliegt). Laden über `--governance` / `SAP_MCP_GOVERNANCE_MODULE`, sonst automatisch, wenn `@guniweb/sap-mcp-governance` installiert ist. Ein konfiguriertes, aber nicht ladbares Modul verhindert den Start. Ohne Modul ändert sich nichts außer einer Startzeile und dem Feld `governance` in `/healthz`. Das Aufrufjournal selbst ist Teil des separat lizenzierten GuniWeb Governance-Moduls.
+
+### Removed
+
+- **`--transport sse` (HTTP+SSE mit `/sse` und `/message`).** Wie in 0.7.0 angekündigt. Die MCP-Spezifikation 2026-07-28 führt den Transport als veraltet. `--transport sse` bzw. `SAP_MCP_TRANSPORT=sse` bricht den Start jetzt mit einem Hinweis ab, statt still auf stdio zu fallen. Wer ihn nutzte, stellt auf `--transport http` um (Streamable HTTP, `/mcp`); der n8n-Node spricht ohnehin nur diesen.
+
 ## [0.7.0] - 2026-10-09
 
 Ein Auftrag lässt sich jetzt per `traceparent` von der aufrufenden Anwendung bis zur SAP-Anfrage im Server-Log verfolgen. Dazu kommen ein Test, der Namen und Schemas der Werkzeuge festhält, und eine Schrittfolge für die Rotation von Zugangsdaten. Keine Verhaltensänderung für bestehende Aufrufer.
@@ -268,6 +280,7 @@ tool had caused which SAP requests.
 - **Source maps from the published tarball.** `dist/index.js.map` is no longer generated; `package.json#files` is now an explicit 3-path whitelist (`dist`, `README.md`, `LICENSE`). The published tarball no longer leaks TypeScript source via `sourcesContent` (Phase 21).
 
 [unreleased]: https://github.com/guniweb/guniweb-sap-mcp/releases
+[0.8.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.8.0
 [0.7.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.7.0
 [0.6.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.6.0
 [0.5.1]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.5.1

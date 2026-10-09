@@ -1640,6 +1640,21 @@ A `grep` on the trace id leads from the caller's own log to the tool call; the c
 
 The [GuniWeb SAP n8n node](https://www.npmjs.com/package/n8n-nodes-guniweb-sap) sets the header from its optional `traceparent` parameter.
 
+### Governance module (call journal)
+
+The operations log above is for running the server: it rotates with the container and is not evidence. Proof of what was done — a durable **call journal** per tool call with the caller's identity, later a verifiable chain and an approval step — comes from the separately licensed **GuniWeb Governance module** (`@guniweb/sap-mcp-governance`, not on npm; ask GuniWeb). The free server provides the extension point and nothing else:
+
+| | |
+|---|---|
+| Loading | `--governance <package or absolute path>` / `SAP_MCP_GOVERNANCE_MODULE`. Without it the server looks for `@guniweb/sap-mcp-governance` next to itself and starts without a journal if it is not there (one `info` line at startup). A module that is **configured or installed but cannot be loaded refuses the start** — whoever bought evidence must never run without it unnoticed |
+| Contract | The module exports `createGovernance(context)` returning `{ apiVersion: 1, name, version, onToolCall(event), health?(), close?() }`. A different `apiVersion` is refused at startup |
+| Event | Once per tool call, after it ended, on every outcome (`ok`, `error`, `timeout`, `aborted`): `correlationId`, `traceId`/`parentId`, `tool`, `kind` (`write` for write tools or when a non-GET request went to SAP, `unknown` for a function import without SAP call, else `read`), `startedAt`, `durationMs`, `sapCalls`, `destination`, `identity`, the unmodified `args` and `result`. Redaction is the module's job |
+| Identity | `authKind` (`token`, `api-key`, `open`, `stdio`), `tokenLabel` (label or the 12-character hash prefix `tokens list` shows — never the token), `sapUser` (personal login), `subject` + `subjectVerified` (user JWT; `true` only with `SAP_JWT_ISSUER`), `personal` |
+| Failure | An exception in the module never changes the response to the client — SAP may already have written. It is logged at `error` |
+| `/healthz` | `governance: { active: false }`, or `{ active: true, module, version, … }` plus what the module reports |
+
+The extension point is a public, versioned interface: a change to the event shape raises `apiVersion`.
+
 ---
 
 ## Resources
