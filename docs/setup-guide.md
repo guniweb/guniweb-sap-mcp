@@ -563,7 +563,7 @@ Every failure carries a `guidance` field with the next action, and a `correlatio
 - Check network/firewall rules
 - For BTP: ensure the Integration Suite is provisioned and the URL is correct
 
-**On `truncated: true`:** the tool time budget expired (default 30 s). Narrow the request (`top`/`skip`, `filter`, `search`) rather than raising the budget. If you do raise it via `--tool-timeout`, keep it **below the smallest client limit** in your setup — measured in production: Cloudflare aborts at 100 s, n8n's MCP client transport at 300 s. A budget above those never takes effect, because the client gives up first.
+**On `truncated: true`:** the tool time budget expired (default 30 s). Narrow the request (`top`/`skip`, `filter`, `search`) rather than raising the budget. If you do raise it via `--tool-timeout`, keep it **below the smallest client limit** in your setup — for example, Cloudflare aborts at 100 s, n8n's MCP client transport at 300 s. A budget above those never takes effect, because the client gives up first.
 
 ### Cold Start After Every Restart
 

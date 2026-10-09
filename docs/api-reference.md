@@ -697,14 +697,14 @@ Most S/4HANA write services behind Fiori apps — purchase requisition, purchase
 | 1. Create a draft | `sap_create` | `entitySet: "C_PurchaseReqnHeader"`, `data: "{}"` → returns `DraftUUID`, `IsActiveEntity: false` |
 | 2. Add an item | `sap_create` | `entitySet: "C_PurchaseReqnHeader(PurchaseRequisition='',DraftUUID=guid'<uuid>',IsActiveEntity=false)/to_PurchaseReqnItem"` |
 | 3. Activate | `sap_function` | `C_PurchaseReqnHeaderActivation` with `{ PurchaseRequisition: "", DraftUUID: "<uuid>", IsActiveEntity: false }` → the active document with its number |
-| 4. Read the active document | `sap_read` | `key: { PurchaseRequisition: "10000411", DraftUUID: "00000000-0000-0000-0000-000000000000", IsActiveEntity: true }` |
+| 4. Read the active document | `sap_read` | `key: { PurchaseRequisition: "10000001", DraftUUID: "00000000-0000-0000-0000-000000000000", IsActiveEntity: true }` |
 | 5. Edit again | `sap_function` | `C_PurchaseReqnHeaderEdit` with the active key → a new draft with its own `DraftUUID` |
 | 6. Change the draft | `sap_query`, `sap_update` | read the draft items via `C_PurchaseReqnHeader(<draft key>)/to_PurchaseReqnItem`, then `sap_update` `C_PurchaseReqnItem` with the item's key as returned; activate as in step 3 |
 | 7. Delete | `sap_delete` | on the active key |
 
 An active document always has the null GUID `00000000-0000-0000-0000-000000000000` as its `DraftUUID`. **The items of a draft have a `DraftUUID` of their own**, not the header's — updating an item with the header's `DraftUUID` fails with `Change not possible; object does not exist`. Read the item keys through the header's navigation (step 6). Steps 2 and 6 are the places where a key goes into a navigation path by hand; everywhere else, pass plain values.
 
-The whole cycle, including a `MERGE` and a `DELETE` inside `sap_batch` changesets, was run against a real S/4HANA system (S20, client 324) on 2026-09-27.
+The whole cycle, including a `MERGE` and a `DELETE` inside `sap_batch` changesets, was run against a real S/4HANA test system on 2026-09-27.
 
 Up to 0.5.0, steps 3 to 7 failed: the server sent `DraftUUID` as a string and `IsActiveEntity` as `'true'`, and SAP rejected both (`Invalid function import parameter type for 'DraftUUID'. Expected type is 'Edm.Guid'`, `Invalid key predicate type for 'IsActiveEntity'. Expected type is 'Edm.Boolean'`).
 
@@ -730,7 +730,7 @@ SAP checks every value in a key predicate and every function import parameter ag
 
 | Edm type | Sent as | Example |
 |---|---|---|
-| `Edm.String` | quoted, `'` doubled | `'10000411'`, `'O''Neil'` |
+| `Edm.String` | quoted, `'` doubled | `'10000001'`, `'O''Neil'` |
 | `Edm.Guid` | `guid'…'` | `guid'fa492a64-b120-1fd1-aed4-19f97d9f4000'` |
 | `Edm.Boolean` | bare | `true` |
 | `Edm.DateTime` | `datetime'…'`, no time zone | `datetime'2026-10-15T00:00:00'` |

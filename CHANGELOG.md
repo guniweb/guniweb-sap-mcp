@@ -44,7 +44,7 @@ Ein Auftrag lässt sich jetzt per `traceparent` von der aufrufenden Anwendung bi
 
   Neu sind ein V4-Formatierer (`src/odata/v4/v4-literal.ts`), der die Typen aus dem `$metadata` nimmt (`Edm.Guid`, `Edm.Date`, `Edm.DateTimeOffset`, Zahlen nackt, `Edm.String` mit verdoppeltem Apostroph, `duration'…'`), und ein Parser für V4-Metadaten als XML (`v4-metadata-xml-parser.ts`, samt Capabilities aus Inline- und `Annotations`-Blöcken). Der V4-Client fordert das `$metadata` als XML an und liest JSON-CSDL, wo ein Dienst es trotzdem liefert. Die Versionserkennung liest die Version am Wurzelelement. Ohne Metadaten gilt eine GUID-förmige Zeichenkette in V4 weiter als Zeichenkette, denn ob ein Dienst sie als `Edm.Guid` oder `Edm.String` führt, weiß nur das `$metadata`. Die Typhilfen für V2 und V4 liegen gemeinsam in `src/odata/edm-types.ts`.
 
-  Ein Integrationstest (`tests/integration/v4-draft-literals.integration.ts`) spielt einen RAP-Draft über die MCP-Werkzeuge durch: aktivieren, lesen, bearbeiten, ändern, erneut aktivieren, löschen, dazu eine gebundene Function mit Datum, GUID und Zeichenkette, Löschen per Batch und die Metadaten aus dem XML. Das nachgestellte Gateway liefert sein `$metadata` als XML wie SAP. Gegen den alten Code schlägt jeder Fall fehl. **Nicht gegen ein echtes System geprüft:** Auf S20 und S22 ist kein V4-Dienst veröffentlicht, auch der V4-Katalog nicht.
+  Ein Integrationstest (`tests/integration/v4-draft-literals.integration.ts`) spielt einen RAP-Draft über die MCP-Werkzeuge durch: aktivieren, lesen, bearbeiten, ändern, erneut aktivieren, löschen, dazu eine gebundene Function mit Datum, GUID und Zeichenkette, Löschen per Batch und die Metadaten aus dem XML. Das nachgestellte Gateway liefert sein `$metadata` als XML wie SAP. Gegen den alten Code schlägt jeder Fall fehl. **Nicht gegen ein echtes System geprüft:** Auf den verfügbaren Testsystemen ist kein V4-Dienst veröffentlicht, auch der V4-Katalog nicht.
 
 ## [0.5.1] - 2026-09-27
 
@@ -60,7 +60,7 @@ Schreiben in Fiori-Draft-Services (BANF, Bestellung, Lieferant, Material) funkti
 
 ### Fixed
 
-- **Fiori-Draft-Services ließen sich anlegen, aber nicht aktivieren, ändern oder löschen.** Die Schlüssel von Draft-Entitäten tragen `DraftUUID` (`Edm.Guid`) und `IsActiveEntity` (`Edm.Boolean`), und SAP prüft jeden Wert in Schlüsselprädikat und Funktionsimport-Parameter streng gegen seinen Edm-Typ. Der Server hatte dafür zwei getrennte Formatierer, und beide rieten nur: `sap_function` setzte bei OData V2 jede Zeichenkette in Apostrophe, auch eine GUID (SAP: `Invalid function import parameter type for 'DraftUUID'. Expected type is 'Edm.Guid'`, und ein schon übergebenes `guid'…'` wurde zu `'guid'…''`), und das Schlüsselprädikat machte aus einem Boolean `'true'` (SAP: `Invalid key predicate type for 'IsActiveEntity'. Expected type is 'Edm.Boolean'`). Damit war jeder Schreibweg gegen BANF, Bestellung, Lieferant oder Material nach dem Anlegen zu Ende. Gemessen am 27.09. gegen S20/324 mit `MM_PUR_PR_PROFNL_MAINTAIN_SRV`, betroffen 0.4.1 und 0.5.0.
+- **Fiori-Draft-Services ließen sich anlegen, aber nicht aktivieren, ändern oder löschen.** Die Schlüssel von Draft-Entitäten tragen `DraftUUID` (`Edm.Guid`) und `IsActiveEntity` (`Edm.Boolean`), und SAP prüft jeden Wert in Schlüsselprädikat und Funktionsimport-Parameter streng gegen seinen Edm-Typ. Der Server hatte dafür zwei getrennte Formatierer, und beide rieten nur: `sap_function` setzte bei OData V2 jede Zeichenkette in Apostrophe, auch eine GUID (SAP: `Invalid function import parameter type for 'DraftUUID'. Expected type is 'Edm.Guid'`, und ein schon übergebenes `guid'…'` wurde zu `'guid'…''`), und das Schlüsselprädikat machte aus einem Boolean `'true'` (SAP: `Invalid key predicate type for 'IsActiveEntity'. Expected type is 'Edm.Boolean'`). Damit war jeder Schreibweg gegen BANF, Bestellung, Lieferant oder Material nach dem Anlegen zu Ende. Gemessen am 27.09. gegen ein S/4HANA-Testsystem mit `MM_PUR_PR_PROFNL_MAINTAIN_SRV`, betroffen 0.4.1 und 0.5.0.
 
   Neu ist ein gemeinsamer Formatierer für beide Stellen (`src/odata/v2/v2-literal.ts`), der die Typen aus dem `$metadata` nimmt: `Edm.Guid` → `guid'…'`, `Edm.Boolean` → `true`, `Edm.DateTime` → `datetime'…'` ohne Zeitzone, `Edm.Decimal` → `5M`, `Edm.String` → `'…'` mit verdoppeltem Apostroph. Der Typ entscheidet, nicht der übergebene Wert: Eine Zahl für einen `Edm.String`-Schlüssel wird trotzdem gequotet, ein schon umhülltes `guid'…'` nicht doppelt. Ohne Metadaten entscheidet der Wert, jetzt auch für Booleans. Die Metadaten liegen nach dem Start ohnehin im Cache, es entsteht kein zusätzlicher Abruf. `sap_function` nimmt bei V2 außerdem die HTTP-Methode aus dem `$metadata`, wenn keine angegeben ist, so wie es die Werkzeugbeschreibung schon immer versprach. Die Beschreibung von `sap_function` erklärt den Draft-Ablauf (`…Activation`, `…Edit` mit `DraftUUID` und `IsActiveEntity`), die API-Referenz zeigt ihn Schritt für Schritt.
 
@@ -68,7 +68,7 @@ Schreiben in Fiori-Draft-Services (BANF, Bestellung, Lieferant, Material) funkti
 
   Ein neuer Integrationstest (`tests/integration/draft-lifecycle.integration.ts`) spielt den ganzen Lebenszyklus einer BANF über die echten MCP-Werkzeuge durch: anlegen, Position über die Navigation, aktivieren, aktiv lesen, bearbeiten, Menge ändern, erneut aktivieren, löschen, dazu Löschen und Ändern per Changeset. Das nachgestellte Gateway ist an genau den Stellen so streng wie SAP und antwortet mit SAPs Fehlertexten. Gegen den alten Code schlägt jeder dieser Tests fehl.
 
-  **Gegen ein echtes System geprüft:** Der ganze Zyklus lief am 27.09. auf S20/324 mit dem Stand dieses Fixes. Aktivieren, aktiv lesen, bearbeiten, Menge per `sap_update` und per `MERGE` im Batch-Changeset ändern, erneut aktivieren, löschen per `sap_delete` und per Batch-Changeset: alles grün, drei Test-BANF angelegt und wieder gelöscht. Dabei fiel auf, dass die Positionen eines Drafts eine **eigene** `DraftUUID` tragen, nicht die des Kopfs. Wer eine Draft-Position mit der Kopf-UUID ändert, bekommt `Change not possible; object does not exist`. Werkzeugbeschreibung und API-Referenz sagen jetzt, dass der Positionsschlüssel über die Navigation des Draft-Kopfs zu lesen ist.
+  **Gegen ein echtes System geprüft:** Der ganze Zyklus lief am 27.09. auf einem S/4HANA-Testsystem mit dem Stand dieses Fixes. Aktivieren, aktiv lesen, bearbeiten, Menge per `sap_update` und per `MERGE` im Batch-Changeset ändern, erneut aktivieren, löschen per `sap_delete` und per Batch-Changeset: alles grün, drei Test-BANF angelegt und wieder gelöscht. Dabei fiel auf, dass die Positionen eines Drafts eine **eigene** `DraftUUID` tragen, nicht die des Kopfs. Wer eine Draft-Position mit der Kopf-UUID ändert, bekommt `Change not possible; object does not exist`. Werkzeugbeschreibung und API-Referenz sagen jetzt, dass der Positionsschlüssel über die Navigation des Draft-Kopfs zu lesen ist.
 
 - **Die Startmeldung zählte die Schreibwerkzeuge falsch auf.** „Schreibwerkzeuge sind aktiv (--allow-write): …" nannte eine fest getippte Liste, die zweimal an der Wirklichkeit vorbeilief: `sap_media_upload` fehlte, und `sap_function` stand weiterhin darin, obwohl es seit 0.5.0 nicht mehr über die Sichtbarkeit läuft, sondern über den Metadaten-Wächter im Handler. Auch `sap_batch` fehlte von Anfang an. Die Meldung wird jetzt aus derselben Quelle abgeleitet, die über die Registrierung entscheidet (`activeWriteTools()` über `TIER_MEMBERSHIP` und `WRITE_TOOLS`), berücksichtigt die aktiven Tiers samt IDoc- und RFC-Bedingung und führt die Namen zusätzlich als Feld `writeTools` im Protokoll. Wer vor einem produktiven Start wissen will, was dieser Server verändern kann, liest damit die Wahrheit statt einer Momentaufnahme von früher.
 
@@ -88,7 +88,7 @@ Binärdaten: SAP-Media-Entities lassen sich jetzt über den Server hoch- und her
 
 ### Fixed
 
-- **Catalog search is now case-insensitive everywhere — as the tool always claimed.** `sap_discover_services` describes its search as case-insensitive across service name, title and description, and that was true only on systems whose Gateway *cannot* filter: there the server fetches the whole catalog and sieves locally. Where the Gateway understands the filter — the fast path added for the 1222-service system — the search was passed through as `substringof('term',TechnicalServiceName)`, which SAP evaluates case-sensitively and only across two of the three fields. Since SAP service names are almost always upper case and people type lower case, the same query found nothing on one system and everything on another. Reproduced against the built-in demo Gateway, where `business partner` returned an empty list. The filter now lowercases both sides (`substringof('business partner',tolower(TechnicalServiceName)) or …`) and includes `Description`. A Gateway that does not understand the expression answers 400 or 501 as before and the server falls back to fetching everything and filtering locally — and now remembers that refusal instead of paying for a doomed round trip on every search.
+- **Catalog search is now case-insensitive everywhere — as the tool always claimed.** `sap_discover_services` describes its search as case-insensitive across service name, title and description, and that was true only on systems whose Gateway *cannot* filter: there the server fetches the whole catalog and sieves locally. Where the Gateway understands the filter — the fast path added for systems with over a thousand services — the search was passed through as `substringof('term',TechnicalServiceName)`, which SAP evaluates case-sensitively and only across two of the three fields. Since SAP service names are almost always upper case and people type lower case, the same query found nothing on one system and everything on another. Reproduced against the built-in demo Gateway, where `business partner` returned an empty list. The filter now lowercases both sides (`substringof('business partner',tolower(TechnicalServiceName)) or …`) and includes `Description`. A Gateway that does not understand the expression answers 400 or 501 as before and the server falls back to fetching everything and filtering locally — and now remembers that refusal instead of paying for a doomed round trip on every search.
 
 ## [0.4.2] - 2026-08-17
 
@@ -110,7 +110,7 @@ Diagnosis fix from the first end-to-end run of the personal SAP login with the n
 
 ### Fixed
 
-- **A wrong SAP password is now reported as an authentication failure**, not as a catalog problem. Measured on an S/4HANA (SAP UCC S22): a rejected Basic-Auth login answers with SAP's HTML page "Anmeldung fehlgeschlagen" — the HTTP status did not survive into the error explainer, so `test-connection` reported stage `auth: ok` and `catalog: failed` with an HTML hint. The explainer now recognises SAP's logon-failure pages (`AUTH_FAILED`, guidance: check user/password, do not retry repeatedly — SAP locks the account) and the diagnosis assigns them to stage `auth` (or `client` when no `SAP_CLIENT` is set). Matters most for the personal login (`user-basic`), where the password comes from each person's n8n credential.
+- **A wrong SAP password is now reported as an authentication failure**, not as a catalog problem. Measured on an S/4HANA: a rejected Basic-Auth login answers with SAP's HTML page "Anmeldung fehlgeschlagen" — the HTTP status did not survive into the error explainer, so `test-connection` reported stage `auth: ok` and `catalog: failed` with an HTML hint. The explainer now recognises SAP's logon-failure pages (`AUTH_FAILED`, guidance: check user/password, do not retry repeatedly — SAP locks the account) and the diagnosis assigns them to stage `auth` (or `client` when no `SAP_CLIENT` is set). Matters most for the personal login (`user-basic`), where the password comes from each person's n8n credential.
 
 ## [0.4.0] - 2026-08-17
 
@@ -160,7 +160,7 @@ One server, several SAP systems, several users. Until now a server knew exactly 
 system, configured through `SAP_*` variables, and every n8n workflow talking to it shared
 that one connection. This release adds named destinations, token-bound access with
 per-token permissions, and a CLI to manage them — while a plain `SAP_*` installation keeps
-working unchanged. Every step was deployed and verified against a live S/4HANA (SAP UCC)
+working unchanged. Every step was deployed and verified against a live S/4HANA
 before the next one started.
 
 ### Added
@@ -179,10 +179,10 @@ before the next one started.
 
 ## [0.2.2] - 2026-08-02
 
-Everything in this release comes from the field requirements gathered on a production
-S/4HANA system on 2026-07-30 (`docs/roadmap.md`). The trigger was a `sap_list_services`
-call that ran into a Cloudflare 524: the server fetched the catalog and then worked
-through 1222 services one by one to load their metadata.
+Everything in this release comes from field requirements gathered on a production
+S/4HANA system in July 2026. The trigger was a `sap_list_services`
+call that ran into a proxy timeout (`524`): the server fetched the catalog and then worked
+through more than a thousand services one by one to load their metadata.
 
 That specific fan-out was already gone. What was missing was the lesson from it —
 a tool call could still grow without an upper bound, and nothing in the log said which
@@ -222,7 +222,7 @@ tool had caused which SAP requests.
 ### Changed
 
 - **`SAP_TLS_VERIFY=false` now warns in every tool result**, not only once at startup. A disabled check that nobody sees after the first day tends to stay for years — on the production system that prompted this work it was set, and nobody noticed.
-- **The catalog path probe no longer downloads the catalog.** It sent no `$top`, so on a 1222-service system it fetched everything just to check whether the path answers. Now `$top=1`.
+- **The catalog path probe no longer downloads the catalog.** It sent no `$top`, so on a system with over a thousand services it fetched everything just to check whether the path answers. Now `$top=1`.
 - **No tool answers with `"Unknown error"` any more.** Every failure now carries a classification, HTTP status, SAP error code, plain-language message and the next action. Raw SAP HTML pages are never passed through — only their essence. Error responses use `guidance` uniformly (previously `hint` in one place).
 - **`serviceUrl` accepts the technical service name** (`API_SALES_ORDER_SRV`) in addition to the path and absolute URLs. Passing the technical name — exactly what `sap_discover_services` returns as `technicalName` — previously produced `"Unknown error"`.
 - **Expected HTTP statuses no longer log as errors.** The catalog probe loop and the V4 catalog attempt declare `404` as normal; over 96 hours of runtime that false alarm was the only `level: 50` entry in the production log.

@@ -150,7 +150,7 @@ A `docker-compose.yml` that puts n8n next to the server is in the repository.
 |-------------------------------|----------------|-------------------------------------------------------------------------------------------------|
 | `--tool-timeout` / `SAP_MCP_TOOL_TIMEOUT` | `30` (seconds) | Time budget for a **whole tool call**, however many SAP requests it makes. On expiry the client gets a valid MCP response with `truncated: true` and a plain-language reason — never a hanging connection. Paginated reads return the pages fetched so far. `0` disables the budget (logged as a warning at startup) |
 | `SAP_HTTP_TIMEOUT_MS`         | `30000`        | Timeout for a **single** outbound SAP request (ms). Hanging gateways fail fast with a structured `TIMEOUT` error instead of stalling the n8n agent. Capped by whatever is left of the tool budget above |
-| `--cache-dir` / `SAP_CACHE_DIR` | _(unset = in-memory only)_ | Persist the catalog and metadata caches to disk so a restart does not refetch them. Without it every restart re-reads the full catalog — on a system with 1222 services that is the cold start that breaks client timeouts. n8n evicts its own client entry on a transport error, so restarts are not rare |
+| `--cache-dir` / `SAP_CACHE_DIR` | _(unset = in-memory only)_ | Persist the catalog and metadata caches to disk so a restart does not refetch them. Without it every restart re-reads the full catalog — on a system with over a thousand services that is the cold start that breaks client timeouts. n8n evicts its own client entry on a transport error, so restarts are not rare |
 | `SAP_CA_CERT` | _(unset)_ | Path to the root CA that signs your SAP certificate — the documented way past a corporate PKI. Mirrored into `NODE_EXTRA_CA_CERTS`. Prefer this over `SAP_TLS_VERIFY=false`, which disables the check rather than solving it |
 | `--concurrency` / `SAP_CONCURRENCY` | `5` | Upper bound on simultaneous SAP requests where several are unavoidable |
 | `--allow-write` / `SAP_MCP_ALLOW_WRITE` | _(unset = read-only)_ | **Since 0.2.2 the server is read-only by default.** `sap_create`, `sap_update`, `sap_delete`, `sap_function` and `sap_idoc_send` are not registered at all until you set this — a tool an agent cannot see is a tool it cannot call by accident. `--read-only` is still accepted and now simply describes the default |
@@ -161,7 +161,7 @@ A `docker-compose.yml` that puts n8n next to the server is in the repository.
 
 In HTTP transport mode the `/idoc` route is mounted on the MCP port: with `--webhook-secret` it authenticates independently of `--api-key` (so SAP's Basic auth works while n8n uses the Bearer key); without it, it falls under `--api-key` if set — and is **open** if neither is configured (the server logs a warning at startup).
 
-Both timeouts must stay **below the smallest client limit** in your setup. Measured against a production S/4HANA behind Cloudflare: Cloudflare aborts at 100 s (`524`), n8n's MCP client transport at 300 s. A budget above the smallest limit never takes effect, because the client gives up first.
+Both timeouts must stay **below the smallest client limit** in your setup. Typical limits: a reverse proxy such as Cloudflare aborts at 100 s (`524`), n8n's MCP client transport at 300 s. A budget above the smallest limit never takes effect, because the client gives up first.
 
 #### Tracing a slow tool call
 
