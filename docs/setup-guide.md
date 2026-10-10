@@ -123,6 +123,7 @@ All server behavior can be configured via command-line flags:
 |------|---------|-------------|
 | `--demo` | off | Start against a built-in in-memory mock S/4HANA (OData V2, sample data) instead of a real system — no `SAP_*` needed, also `SAP_MCP_DEMO=true`. Combine with `--allow-write` to try writes. Refuses to start together with `SAP_BASE_URL`/`--destinations`. Sample data only, nothing leaves the machine |
 | `--governance <module>` | auto | Load the separately licensed GuniWeb Governance module (call journal) by package name or absolute path, also `SAP_MCP_GOVERNANCE_MODULE`. Without it the server looks for `@guniweb/sap-mcp-governance` and runs without a journal if it is not installed. Configured or installed but not loadable: the server does not start. See [API Reference → Governance module](api-reference.md#governance-module-call-journal) |
+| `SAP_MCP_GOVERNANCE_NOTICE` | on | Without a Governance module the server logs one short line at startup pointing to it (stderr, never on a tool call). `off` hides it |
 | `--transport <mode>` | `stdio` | Transport mode: `stdio` or `http` (`sse` was removed in 0.8.0) |
 | `--port <number>` | `8808` | HTTP listening port |
 | `--api-key <key>` | none | API key for HTTP transport authentication (Bearer token) |

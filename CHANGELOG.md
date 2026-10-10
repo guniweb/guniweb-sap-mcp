@@ -8,6 +8,18 @@ Breaking changes to tool names or input schemas only come with a major version (
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-10
+
+Ergänzungen an der Governance-Schnittstelle für das Aufrufjournal: das angelegte Objekt, Konfigurationsänderungen und Admin-Aktionen. Ohne Modul ändert sich nur die Startzeile: Sie weist kurz auf das Modul hin und lässt sich mit `SAP_MCP_GOVERNANCE_NOTICE=off` ausblenden.
+
+### Added
+
+- **Governance-Schnittstelle: angelegtes Objekt und Konfigurationsänderungen.** Das Ereignis eines Werkzeugaufrufs trägt bei einer erfolgreichen Anlage `createdEntity` (`EntitySet(Schlüssel)` aus der Antwort von SAP, ohne Host). Ein Modul kann außerdem `onConfigChange` anbieten: Bei jedem Neuladen der `destinations.json` mit Unterschied (CLI, Admin-API, Handarbeit) meldet der Server, welche Destinations und Tokens dazugekommen, geändert, widerrufen oder entfernt wurden — mit Feldnamen, nie Werten. Mit `onAdminAction` meldet die Admin-API jede Änderung mit Aktion, Ziel und Client-Adresse. `apiVersion` bleibt 1; die Methoden sind optional.
+
+### Changed
+
+- **Startzeile ohne Governance-Modul.** Statt „nicht installiert“ sagt sie jetzt in einem Satz, was das Modul leistet (dauerhaftes, abfragbares Aufrufjournal für Prüfungen, ohne Nutzdaten) und wo es es gibt (`guniweb.de/sap-mcp`, `support@guniweb.de`). Eine Zeile beim Start, nie bei einem Werkzeugaufruf, über stderr. `SAP_MCP_GOVERNANCE_NOTICE=off` blendet sie aus.
+
 ## [0.8.0] - 2026-10-10
 
 Der Server bekommt eine Erweiterungsschnittstelle für das separat lizenzierte GuniWeb Governance-Modul (Aufrufjournal). Ohne Modul ändert sich nur eine Startzeile und das Feld `governance` in `/healthz`. **Breaking:** `--transport sse` ist entfernt, wie in 0.7.0 angekündigt. Wer es nutzte, stellt auf `--transport http` um.
@@ -280,6 +292,7 @@ tool had caused which SAP requests.
 - **Source maps from the published tarball.** `dist/index.js.map` is no longer generated; `package.json#files` is now an explicit 3-path whitelist (`dist`, `README.md`, `LICENSE`). The published tarball no longer leaks TypeScript source via `sourcesContent` (Phase 21).
 
 [unreleased]: https://github.com/guniweb/guniweb-sap-mcp/releases
+[0.8.1]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.8.1
 [0.8.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.8.0
 [0.7.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.7.0
 [0.6.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.6.0
