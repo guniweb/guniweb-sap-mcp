@@ -8,6 +8,18 @@ Breaking changes to tool names or input schemas only come with a major version (
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-10-11
+
+Unbekannte Startargumente brechen jetzt ab, statt still ignoriert zu werden. Neu ist `--version`.
+
+### Added
+
+- **`--version`** gibt die Version aus und beendet sich, ohne einen Server zu starten.
+
+### Fixed
+
+- **Unbekannte Argumente brechen den Start ab.** Bisher übersprang der Server Flags, die er nicht kannte (`--version`, Tippfehler, `--port=8808`), und startete trotzdem. In einem Container mit Governance-Modul startete `docker exec … guniweb-sap-mcp --version` so einen zweiten Server. Der übernahm die Sperre des Aufrufjournals und brach dessen Hash-Kette. Jetzt endet der Start mit Exit-Code 1 und nennt die unbekannten Argumente. Das passiert, bevor ein Modul lädt oder ein Port aufgeht. **Bitte prüfen:** Wer bisher ein unbekanntes Flag übergeben hat, bekommt jetzt einen Startabbruch statt eines stillen Ignorierens. Die Verwaltungskommandos `tokens` und `destinations` sind nicht betroffen.
+
 ## [0.8.2] - 2026-10-11
 
 Wartungsrelease: MCP SDK 1.32.1 und aktualisierte Abhängigkeiten. Verhalten und Werkzeuge bleiben gleich.
@@ -304,6 +316,7 @@ tool had caused which SAP requests.
 - **Source maps from the published tarball.** `dist/index.js.map` is no longer generated; `package.json#files` is now an explicit 3-path whitelist (`dist`, `README.md`, `LICENSE`). The published tarball no longer leaks TypeScript source via `sourcesContent` (Phase 21).
 
 [unreleased]: https://github.com/guniweb/guniweb-sap-mcp/releases
+[0.8.3]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.8.3
 [0.8.2]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.8.2
 [0.8.1]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.8.1
 [0.8.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.8.0
