@@ -8,6 +8,18 @@ Breaking changes to tool names or input schemas only come with a major version (
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-10-11
+
+Wartungsrelease: MCP SDK 1.32.1 und aktualisierte Abhängigkeiten. Verhalten und Werkzeuge bleiben gleich.
+
+### Changed
+
+- **MCP SDK auf 1.32.1** (vorher 1.29.0). Das ist Schritt 0 aus `docs/mcp-spec-2026-07-28-plan.md`, und am Protokoll ändert sich nichts. Das SDK bringt Sicherheitsfixe mit, etwa Weiterleitungen nur innerhalb desselben Origin. Neue Grenzen wie `maxToolInputElements` sind opt-in und bleiben aus. Clients wie der n8n-Node 0.2.0/0.3.0 arbeiten unverändert weiter.
+
+### Security
+
+- **Abhängigkeiten aktualisiert** (`npm audit fix`, nur innerhalb der vorhandenen Versionsbereiche). Behoben sind Hinweise zu `axios`, `form-data`, `proxy-addr`, `qs`, `body-parser`, `fast-uri`, `ip-address`, `@xmldom/xmldom`, `brace-expansion`, `hono` und `@hono/node-server`. `npm audit` meldet für die Laufzeitabhängigkeiten keinen Fund mehr.
+
 ## [0.8.1] - 2026-10-10
 
 Ergänzungen an der Governance-Schnittstelle für das Aufrufjournal: das angelegte Objekt, Konfigurationsänderungen und Admin-Aktionen. Ohne Modul ändert sich nur die Startzeile: Sie weist kurz auf das Modul hin und lässt sich mit `SAP_MCP_GOVERNANCE_NOTICE=off` ausblenden.
@@ -292,6 +304,7 @@ tool had caused which SAP requests.
 - **Source maps from the published tarball.** `dist/index.js.map` is no longer generated; `package.json#files` is now an explicit 3-path whitelist (`dist`, `README.md`, `LICENSE`). The published tarball no longer leaks TypeScript source via `sourcesContent` (Phase 21).
 
 [unreleased]: https://github.com/guniweb/guniweb-sap-mcp/releases
+[0.8.2]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.8.2
 [0.8.1]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.8.1
 [0.8.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.8.0
 [0.7.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.7.0
