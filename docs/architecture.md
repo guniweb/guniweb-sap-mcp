@@ -358,7 +358,7 @@ src/
 │   ├── resources/              # MCP resources (metadata, schema, routing)
 │   └── prompts/                # Pre-built conversation starters
 └── transport/                  # HTTP server
-    └── http-server.ts          # Streamable HTTP, api-key/token auth, per-destination caches
+    └── http-server.ts          # Streamable HTTP (SDK v2 createMcpHandler, 2026-07-28 + 2025-11-25), api-key/token auth, per-destination caches
 ```
 
 ## Key Design Decisions

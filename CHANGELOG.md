@@ -8,6 +8,22 @@ Breaking changes to tool names or input schemas only come with a major version (
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-13
+
+Der Server läuft auf MCP SDK v2 und spricht zusätzlich das Protokoll 2026-07-28. Neu ist eine Ratenbegrenzung je Token und je Destination, die ohne Konfiguration aus bleibt. Bestehende Clients und Installationen laufen unverändert weiter.
+
+### Breaking
+
+- **Schema-Dialekt in `tools/list`** (#71). Die Eingabeschemas aller Werkzeuge nennen jetzt `$schema: https://json-schema.org/draft/2020-12/schema` statt draft-07. Namen, Felder, Typen und Pflichtangaben sind unverändert. Betroffen ist nur ein Client, der Schemas streng nach dem Dialekt validiert oder den Werkzeugvertrag wörtlich vergleicht. Der n8n-Node und das MCP-Client-Tool von n8n sind nicht betroffen.
+
+### Added
+
+- **Ratenbegrenzung je Token und je Destination** (#73). `rateLimit: { requestsPerMinute?, maxConcurrent? }` in der Token-Policy begrenzt die Werkzeugaufrufe dieses Tokens; an einer Destination gilt dieselbe Angabe für alle Aufrufer zusammen. Gezählt wird nur `tools/call`. Über der Grenze antwortet der Server mit `429`, `Retry-After` und einem Hinweis, welche Grenze griff; ein abgewiesener Aufruf verbraucht nichts. Ohne Angabe gibt es keine Grenze, bestehende Installationen verhalten sich unverändert. Nur im HTTP-Betrieb. Verwaltung per CLI (`tokens limit`, `destinations limit`, `--rate-per-minute`/`--max-concurrent` bei `tokens issue`) und Admin-API (`PUT`/`DELETE …/rate-limit`, `rateLimit` bei `POST /admin/tokens`). Hintergrund: SAP Architecture Center RA0029/10 verlangt eine Grenze unterhalb der SAP-Quote je Verbraucher.
+
+### Changed
+
+- **MCP SDK v2 und Protokoll 2026-07-28** (#71). Der Server läuft auf `@modelcontextprotocol/server` 2.3 statt `@modelcontextprotocol/sdk` 1.32 und spricht am selben Endpunkt beide Protokollgenerationen: das zustandslose 2026-07-28 und weiterhin 2025-11-25. Bestehende Clients merken davon nichts, weder der n8n-Node (ohne `initialize`) noch das MCP-Client-Tool von n8n (mit `initialize`). Werkzeuge, Namen und Argumente bleiben gleich. `traceparent` kommt in beiden Generationen aus dem Header oder aus `_meta`. Auch stdio entscheidet je Verbindung anhand der ersten Nachricht. Die v1-Linie des SDK bekommt nur noch bis etwa Januar 2027 Fehlerkorrekturen. Zum Schema-Dialekt siehe *Breaking*.
+
 ## [0.8.3] - 2026-10-11
 
 Unbekannte Startargumente brechen jetzt ab, statt still ignoriert zu werden. Neu ist `--version`.
@@ -316,6 +332,7 @@ tool had caused which SAP requests.
 - **Source maps from the published tarball.** `dist/index.js.map` is no longer generated; `package.json#files` is now an explicit 3-path whitelist (`dist`, `README.md`, `LICENSE`). The published tarball no longer leaks TypeScript source via `sourcesContent` (Phase 21).
 
 [unreleased]: https://github.com/guniweb/guniweb-sap-mcp/releases
+[0.9.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.9.0
 [0.8.3]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.8.3
 [0.8.2]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.8.2
 [0.8.1]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.8.1

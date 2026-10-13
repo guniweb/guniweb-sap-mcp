@@ -273,6 +273,8 @@ guniweb-sap-mcp destinations remove s4test [--force]       # refuses while token
 
 - **Per-token permissions** — `"policy": { "readOnly": true, "tiers": ["core", "odata"] }`. A policy only ever *restricts*: `readOnly: true` hides the write tools for that token even when the server runs with `--allow-write` (`readOnly: false` cannot open a read-only server), and `tiers` is a ceiling — tiers outside it are invisible for that token and `sap_enable_tools` cannot switch them on. `tools/list` is filtered per request, so an agent on a read-only token never sees `sap_create` in the first place.
 
+- **Rate limits per token and per destination** — for AI agents that call in a loop, and to stay below the quotas of the SAP API. `"rateLimit": { "requestsPerMinute": 60, "maxConcurrent": 4 }` in a token's `policy` limits that token; the same object on a destination limits all callers of that SAP system together. Only tool calls count (`tools/list` stays free); above the limit the server answers `429` with `Retry-After` and a hint naming the limit. No limit is configured by default. HTTP transport only. Set it without hand-editing: `guniweb-sap-mcp tokens limit "n8n agent" --rate-per-minute 60`, `guniweb-sap-mcp destinations limit s4prod --max-concurrent 4` (`--clear` removes it), or `--rate-per-minute`/`--max-concurrent` on `tokens issue`.
+
 **Admin API — the same operations over HTTP (self-service).** With `--admin-token <secret>` (or `SAP_MCP_ADMIN_TOKEN`, at least 16 characters, e.g. `openssl rand -base64 32`) the server exposes the CLI's operations under `/admin` — for an n8n workflow that provisions a new customer's access, a script, or a person with `curl`, without a shell on the host:
 
 ```bash

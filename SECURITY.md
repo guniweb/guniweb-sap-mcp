@@ -41,6 +41,7 @@ guniweb-sap-mcp sends **nothing** anywhere except to the SAP and BTP endpoints y
 - Run the HTTP transport behind authentication (`--api-key` or destination tokens) — the server warns at startup if it is open.
 - Put `destinations.json` (or `.env`) on a volume with restrictive permissions and keep it out of version control; the CLI writes it `0600`.
 - Keep the server behind your reverse proxy / network boundary; it is designed to sit next to n8n, not on the public internet.
+- When an AI agent uses the server, give its token a rate limit (`policy.rateLimit`, or `tokens limit`) below the quota of the SAP API, so a looping agent cannot exhaust it for everyone else.
 
 ## Scope
 
