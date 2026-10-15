@@ -8,6 +8,18 @@ Breaking changes to tool names or input schemas only come with a major version (
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-15
+
+Ist die Grenze gleichzeitiger Aufrufe erreicht, warten überzählige Werkzeugaufrufe jetzt in einer Schlange, statt sofort abgewiesen zu werden.
+
+### Added
+
+- **Warteschlange für `maxConcurrent`.** Ist die Grenze gleichzeitiger Aufrufe erreicht (Token oder Destination), wartet ein Werkzeugaufruf jetzt FIFO auf einen freien Platz, statt sofort mit `429` abgewiesen zu werden. Höchstens `--rate-limit-max-wait <s>` bzw. `SAP_MCP_RATE_LIMIT_MAX_WAIT` (Standard 60 s), danach `429` mit `Retry-After` wie bisher; `0` stellt das Verhalten von 0.9.0 wieder her. Ein frei werdender Platz geht direkt an den nächsten passenden Wartenden: nie mehr Aufrufe gleichzeitig als erlaubt, kein Vordrängeln. Wer beim Warten die Verbindung schließt, verlässt die Schlange. Ein Aufruf, der gewartet hat, steht mit `waitedMs` im Log, Werkzeug-Logzeile und Governance-Ereignis tragen `queueWaitMs` (ohne Nutzdaten). `requestsPerMinute` wartet bewusst nicht. Hintergrund: Ein Sammelbeleg startet mehrere Simulationen zugleich; die überzähligen sollen warten, nicht scheitern.
+
+### Changed
+
+- Überschreitet ein Aufruf zugleich `requestsPerMinute` und `maxConcurrent`, nennt die `429` jetzt die Minutengrenze (mit deren längerem `Retry-After`), weil Warten auf einen freien Platz dort nicht hilft.
+
 ## [0.9.0] - 2026-10-13
 
 Der Server läuft auf MCP SDK v2 und spricht zusätzlich das Protokoll 2026-07-28. Neu ist eine Ratenbegrenzung je Token und je Destination, die ohne Konfiguration aus bleibt. Bestehende Clients und Installationen laufen unverändert weiter.
@@ -332,6 +344,7 @@ tool had caused which SAP requests.
 - **Source maps from the published tarball.** `dist/index.js.map` is no longer generated; `package.json#files` is now an explicit 3-path whitelist (`dist`, `README.md`, `LICENSE`). The published tarball no longer leaks TypeScript source via `sourcesContent` (Phase 21).
 
 [unreleased]: https://github.com/guniweb/guniweb-sap-mcp/releases
+[0.10.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.10.0
 [0.9.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.9.0
 [0.8.3]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.8.3
 [0.8.2]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.8.2
