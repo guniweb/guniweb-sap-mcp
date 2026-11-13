@@ -180,7 +180,7 @@ flowchart TB
     Registry --> Active["Active Tool List<br/>sent to MCP Client"]
     Active --> LLM["LLM sees only<br/>visible tools"]
 
-    LLM -->|"sap_enable_tools<br/>(tier: 'idoc')"| Enable["enableTier()"]
+    LLM -->|"sap_enable_tools<br/>(tier: 'idoc', stdio only)"| Enable["enableTier()"]
     Enable --> Notify["listChanged notification"]
     Notify --> Active
 
@@ -188,6 +188,8 @@ flowchart TB
     style Registry fill:#2d2d2d,color:#fff
     style LLM fill:#5b8c5a,color:#fff
 ```
+
+Runtime activation works on stdio, where one server instance lives for the whole connection. The HTTP transport builds a fresh instance per request; there `sap_enable_tools` reports an error and the tiers are fixed with `--tiers` at startup.
 
 ## Named Destinations and Token-Bound Access (0.3.0)
 

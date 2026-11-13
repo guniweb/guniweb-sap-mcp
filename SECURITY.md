@@ -27,6 +27,7 @@ guniweb-sap-mcp sends **nothing** anywhere except to the SAP and BTP endpoints y
 
 ## Secure defaults you get without configuring anything
 
+- **No unauthenticated HTTP endpoint by default.** Without an API key or tokens the HTTP transport refuses to start, and `/mcp` stays closed (`503`) whenever no credential is configured — also during the Admin API bootstrap and after the last token is removed. Only `--allow-unauthenticated` or the demo mode (mock data only) open it.
 - **Read-only by default.** `sap_create`, `sap_update`, `sap_delete`, `sap_function`, `sap_batch`, `sap_idoc_send` and the RFC/BAPI write tools are not registered until `--allow-write` is set — a tool an agent cannot see is a tool it cannot call by accident.
 - **Tokens and secrets never reach the log.** Bearer tokens, SAP passwords, client secrets and PEM material are not logged; outbound `Authorization` headers appear masked. Rejected requests are logged with client address and reason only.
 - **Token-bound access.** With named destinations, one Bearer token per n8n credential selects the SAP system; only the SHA-256 hash of a token is stored, comparison is constant-time over all entries, revocation takes effect on the next request, and after 10 failed attempts per minute a client address gets `429`.
@@ -34,13 +35,16 @@ guniweb-sap-mcp sends **nothing** anywhere except to the SAP and BTP endpoints y
 - **Incoming user tokens are verified** against the issuer's JWKS when `SAP_JWT_ISSUER` is set; a token failing verification is rejected with `401` rather than silently downgraded to the technical user.
 - **XML parsing is hardened** against external entities and entity expansion (IDoc webhook and `$metadata`); the IDoc webhook enforces a body-size limit and its own shared secret.
 - **TLS verification is on**; `SAP_TLS_VERIFY=false` is warned about in **every** tool result, not only at startup. Corporate CAs go in via `SAP_CA_CERT`.
-- **The published npm package contains no source and no source maps** — five files, checked by a hard gate in the release pipeline.
+- **The published npm package contains no source and no source maps** — six files, checked by a hard gate in the release pipeline.
+- **Dependencies are pinned.** The package ships an `npm-shrinkwrap.json`: `npm install guniweb-sap-mcp` and `npx guniweb-sap-mcp` resolve every direct and transitive dependency to exactly the versions the release was tested against, with integrity hashes. Fixes in dependencies therefore reach you through a new release of this server.
+- **The build chain is pinned too.** GitHub Actions are referenced by commit SHA, the container base image by tag plus digest. Dependabot proposes updates for npm dependencies, Actions and the base image.
 
 ## What we ask of operators
 
-- Run the HTTP transport behind authentication (`--api-key` or destination tokens) — the server warns at startup if it is open.
+- Run the HTTP transport behind authentication (`--api-key` / `SAP_MCP_API_KEY` or destination tokens). Since 0.11.0 it does not start without one; the open mode needs `--allow-unauthenticated` and logs a warning at every start.
 - Put `destinations.json` (or `.env`) on a volume with restrictive permissions and keep it out of version control; the CLI writes it `0600`.
 - Keep the server behind your reverse proxy / network boundary; it is designed to sit next to n8n, not on the public internet.
+- If a gateway filters tool calls by the `Mcp-Method` / `Mcp-Name` headers, let it accept only requests with `MCP-Protocol-Version: 2026-07-28`, or filter on the JSON-RPC body instead. The server checks these headers against the body only in the 2026-07-28 protocol; a request without that version runs as the older protocol, where the headers are not evaluated. Details: [Setup Guide → HTTP](docs/setup-guide.md#http-streamable-http).
 - When an AI agent uses the server, give its token a rate limit (`policy.rateLimit`, or `tokens limit`) below the quota of the SAP API, so a looping agent cannot exhaust it for everyone else. `maxConcurrent` caps parallel calls against SAP; surplus calls wait in a queue (`--rate-limit-max-wait`, default 60 s) instead of failing.
 
 ## Scope

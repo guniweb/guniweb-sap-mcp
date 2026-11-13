@@ -57,6 +57,10 @@ services:
       - SAP_USERNAME=YOUR_SAP_USER
       - SAP_PASSWORD=YOUR_SAP_PASSWORD
       - SAP_CLIENT=100
+      # The HTTP transport does not start without authentication. n8n sends this
+      # key as "Bearer Auth" credential. Use tokens in a destinations.json instead
+      # when you run several SAP systems (see below).
+      - SAP_MCP_API_KEY=CHANGE_ME_LONG_RANDOM_KEY
     # Option B: use an .env file instead (uncomment and remove environment above)
     # env_file:
     #   - .env

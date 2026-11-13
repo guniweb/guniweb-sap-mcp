@@ -4,7 +4,7 @@ Complete reference for all MCP tools, resources, and prompts provided by the SAP
 
 ## Tools
 
-The server provides **24 tools**, organised in four tiers plus one meta-tool. The `core` and `odata` tiers are active by default; `idoc` and `rfc` are switched on with `--tiers` at startup or with `sap_enable_tools` at runtime. Write tools (marked with \*) are only registered when the server runs with `--allow-write` (or `SAP_MCP_ALLOW_WRITE=true`) — in the default read-only mode they do not appear in `tools/list` at all.
+The server provides **24 tools**, organised in four tiers plus one meta-tool. The `core` and `odata` tiers are active by default; `idoc` and `rfc` are switched on with `--tiers` at startup or, on stdio, with `sap_enable_tools` at runtime. Write tools (marked with \*) are only registered when the server runs with `--allow-write` (or `SAP_MCP_ALLOW_WRITE=true`) — in the default read-only mode they do not appear in `tools/list` at all.
 
 [`sap_function`](#sap_function) is the one exception (marked with \**): it stays visible in read-only mode, because a function import may read or write. Which one it is comes from the service metadata, checked per call — see [Function imports in read-only mode](#function-imports-in-read-only-mode).
 
@@ -16,7 +16,7 @@ The server provides **24 tools**, organised in four tiers plus one meta-tool. Th
 | `rfc` | [`sap_rfc_call`](#sap_rfc_call)\*, [`sap_rfc_metadata`](#sap_rfc_metadata), [`sap_bapi_call`](#sap_bapi_call)\*, [`sap_bapi_commit`](#sap_bapi_commit)\*, [`sap_rfc_search_functions`](#sap_rfc_search_functions) | No — see [RFC/BAPI tools](#rfcbapi-tools) |
 | meta | [`sap_enable_tools`](#sap_enable_tools) | Yes (not registered in read-only mode) |
 
-Every tool declares MCP annotations. Read tools carry `readOnlyHint: true`; write tools carry `readOnlyHint: false`, and `sap_delete`, `sap_batch` and `sap_bapi_commit` additionally `destructiveHint: true`.
+Every tool declares MCP annotations. Read tools carry `readOnlyHint: true`; write tools carry `readOnlyHint: false`. `destructiveHint: true` marks every tool that can change or remove existing data, or whose effect the server cannot know in advance: `sap_update`, `sap_delete`, `sap_batch`, `sap_function`, `sap_idoc_send`, `sap_rfc_call`, `sap_bapi_call` and `sap_bapi_commit`. Only `sap_create` and `sap_media_upload` are write tools with `destructiveHint: false` — they add, they do not overwrite. `sap_enable_tools` carries `readOnlyHint: false`: it touches no SAP data, but it makes further tools available, so a client that waves read-only calls through should still ask.
 
 ### Stability of tool names and schemas
 
@@ -981,7 +981,7 @@ Up to 0.5.0 every V2 batch failed on SAP with `The Data Services Request could n
 
 ### IDoc tools
 
-The four IDoc tools form the `idoc` tier, which is **inactive by default**. Activate it at startup with `--tiers core,odata,idoc` or at runtime with [`sap_enable_tools`](#sap_enable_tools) (`tier: "idoc"`). Either way the tier only becomes available when an IDoc partner configuration is present — at minimum `--sndprn` and `--rcvprn` (`--sndpor`, `--rcvpor`, `--sndprt`, `--rcvprt` are optional). Without it the tools stay hidden and `sap_enable_tools` refuses with an error naming the missing flags.
+The four IDoc tools form the `idoc` tier, which is **inactive by default**. Activate it at startup with `--tiers core,odata,idoc` or, on stdio, at runtime with [`sap_enable_tools`](#sap_enable_tools) (`tier: "idoc"`). Either way the tier only becomes available when an IDoc partner configuration is present — at minimum `--sndprn` and `--rcvprn` (`--sndpor`, `--rcvpor`, `--sndprt`, `--rcvprt` are optional). Without it the tools stay hidden and `sap_enable_tools` refuses with an error naming the missing flags.
 
 `sap_idoc_send` is a write tool and additionally requires `--allow-write`. The other three are read-only.
 
@@ -1237,7 +1237,7 @@ The five RFC/BAPI tools form the `rfc` tier, which is **inactive by default**. T
 
 1. **`node-rfc` is importable** (SDK installed, `npm install node-rfc`). If it is not, the server logs a warning at startup and the RFC tools are **not registered at all** — they cannot be enabled later in that process.
 2. **RFC connection settings** are present in the environment: `SAP_USERNAME` and `SAP_PASSWORD` plus either `SAP_RFC_ASHOST` + `SAP_RFC_SYSNR` (direct application server) or `SAP_RFC_MSHOST` + `SAP_RFC_GROUP` (logon group; `SAP_RFC_MSSERV` optional). `SAP_CLIENT` and `SAP_RFC_LANG` (default `EN`) are passed along; SNC is configured with `SAP_SNC_QOP`, `SAP_SNC_MYNAME`, `SAP_SNC_PARTNERNAME` and `SAP_SNC_LIB` (all-or-none). Without these the tier stays hidden and `sap_enable_tools` refuses with an error.
-3. **The tier is active** — via `--tiers core,odata,rfc` at startup or `sap_enable_tools` (`tier: "rfc"`) at runtime.
+3. **The tier is active** — via `--tiers core,odata,rfc` at startup or, on stdio, `sap_enable_tools` (`tier: "rfc"`) at runtime.
 
 `sap_rfc_call`, `sap_bapi_call` and `sap_bapi_commit` are write tools and additionally require `--allow-write`; `sap_rfc_metadata` and `sap_rfc_search_functions` are read-only.
 
@@ -1503,6 +1503,8 @@ One tool manages the tiers themselves.
 ### sap_enable_tools
 
 Activate an additional tool tier for the current session. Lets an agent that starts with `core` + `odata` switch on `idoc` or `rfc` on demand, without a server restart. The tool description lists which tiers are currently active and which can still be activated.
+
+> **stdio only:** over HTTP the server handles every request with a fresh instance, so there is no session an activation could last in. There the tool answers with `status: "error"` and points to `--tiers`; choose the tiers at startup (`--tiers core,odata,idoc`). Up to 0.10.0 it answered `success` over HTTP although nothing changed.
 
 > **Not available in read-only mode:** without `--allow-write` this tool is not registered at all, so tiers can then only be chosen with `--tiers` at startup. Enabling a tier never bypasses read-only mode or a per-token policy: write tools stay hidden, and tiers outside a token's `tiers` ceiling cannot be enabled.
 

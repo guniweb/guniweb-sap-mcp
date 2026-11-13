@@ -92,6 +92,8 @@ The demo starts an in-memory OData V2 gateway on localhost (three services with 
 npm install -g guniweb-sap-mcp
 ```
 
+For production, name the version (`npm install -g guniweb-sap-mcp@<version>`, `npx guniweb-sap-mcp@<version>`, image tag `:<version>` instead of `:latest`). The examples here leave it out so they stay copyable.
+
 Or [run it as a container](#run-as-a-container): `docker run --rm -p 8808:8808 -e SAP_MCP_DEMO=true ghcr.io/guniweb/guniweb-sap-mcp:latest`
 
 ### 2. Configure
@@ -129,7 +131,8 @@ guniweb-sap-mcp --transport http --port 8808 --api-key <mcp-key> --webhook-secre
 # Look around first — mock S/4HANA inside the container, no SAP system needed
 docker run --rm -p 8808:8808 -e SAP_MCP_DEMO=true ghcr.io/guniweb/guniweb-sap-mcp:latest
 
-# Against a real system (pin the version in production)
+# Against a real system (pin the version in production). The HTTP transport
+# needs SAP_MCP_API_KEY in .env, or tokens in a destinations.json
 docker run -d --name sap-mcp -p 8808:8808 --env-file .env \
   ghcr.io/guniweb/guniweb-sap-mcp:<version>
 
@@ -293,7 +296,7 @@ curl -H "$A" -X DELETE "$U/destinations/s4test?force=true"      # remove; withou
 
 - **Separate keys, separate doors.** The admin secret opens *only* `/admin`; the n8n tokens and `--api-key` open *only* `/mcp`. A leaked n8n token cannot mint further access, an admin secret cannot read SAP data. Wrong secrets are counted per client address (`429` after 10 failures per minute); every change is logged with action, target and client address — never the token, never the secret. Without `--admin-token`, `/admin/*` answers `404`.
 - **Effective immediately.** Every write validates like the CLI, writes atomically and reloads the running configuration before answering (`"reloaded": true`). If the server cannot load what was written — typically a `${VAR}` that only your shell knows, written with `?allowMissingEnv=true` — the answer says `"reloaded": false` with the errors, and the last valid configuration stays in force.
-- **Bootstrap without any SAP configuration.** With `--admin-token` the server starts even if `destinations.json` does not exist yet and no `SAP_*` is set: `/mcp` answers `503` until the first destination (and a token, or a destination named `default`) has been created through the API. `docker run … -e SAP_MCP_ADMIN_TOKEN=… -e SAP_MCP_DESTINATIONS=/config/destinations.json` is a complete first start.
+- **Bootstrap without any SAP configuration.** With `--admin-token` the server starts even if `destinations.json` does not exist yet and no `SAP_*` is set: `/mcp` answers `503` until the first destination and a token for it have been created through the API (a destination named `default` alone does not open `/mcp`). `docker run … -e SAP_MCP_ADMIN_TOKEN=… -e SAP_MCP_DESTINATIONS=/config/destinations.json` is a complete first start.
 - Put the API behind the same reverse proxy/TLS as `/mcp`; the admin secret travels as a Bearer header like any other credential.
 
 **Rotating tokens and SAP passwords** — step by step, with what needs a restart and what does not: [Setup Guide → Rotating credentials](docs/setup-guide.md#rotating-credentials).

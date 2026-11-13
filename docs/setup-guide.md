@@ -22,8 +22,10 @@ npm install -g guniweb-sap-mcp
 ### Without a global install
 
 ```bash
-npx guniweb-sap-mcp --transport http --port 8808
+npx guniweb-sap-mcp --transport http --port 8808 --api-key <key>
 ```
+
+`npx guniweb-sap-mcp` runs whatever version is newest at that moment. For anything unattended, name the version: `npx guniweb-sap-mcp@<version> …`. From 0.11.0 on the package also fixes the versions of all its dependencies (`npm-shrinkwrap.json`), so the same version always installs the same code.
 
 ### Without an SAP system
 
@@ -127,7 +129,8 @@ All server behavior can be configured via command-line flags:
 | `SAP_MCP_GOVERNANCE_NOTICE` | on | Without a Governance module the server logs one short line at startup pointing to it (stderr, never on a tool call). `off` hides it |
 | `--transport <mode>` | `stdio` | Transport mode: `stdio` or `http` (`sse` was removed in 0.8.0) |
 | `--port <number>` | `8808` | HTTP listening port |
-| `--api-key <key>` | none | API key for HTTP transport authentication (Bearer token) |
+| `--api-key <key>` | none | API key for HTTP transport authentication (Bearer token), also `SAP_MCP_API_KEY`. The HTTP transport needs this or at least one token in `destinations.json` — without either it does not start (see [Open mode](#open-mode)) |
+| `--allow-unauthenticated` | off | Start the HTTP transport without `--api-key` and without tokens, also `SAP_MCP_ALLOW_UNAUTHENTICATED=true` (only the literal `true`). `/mcp` is then open to anyone who reaches the port |
 | `--destinations <path>` | none | Named SAP connections from a `destinations.json` (also `SAP_MCP_DESTINATIONS`). See [Named destinations](#named-destinations-destinationsjson) |
 | `--expose <patterns>` | all | Comma-separated glob patterns for entity set filtering |
 | `--webhook-port <number>` | none | Standalone IDoc webhook port (stdio mode only) |
@@ -203,7 +206,7 @@ guniweb-sap-mcp --transport http --port 8808 --destinations /config/destinations
 | `rateLimit` (#73) | `{ "requestsPerMinute"?: n, "maxConcurrent"?: n }` (at least one, whole numbers ≥ 1) — in a token's `policy` it limits that token, on a destination entry it limits **all callers of that destination together**. Counted are tool calls (`tools/call`), not `tools/list`. `requestsPerMinute` is a sliding 60-second window, `maxConcurrent` counts calls still running (a slot frees when the response is done or the caller disconnects). **Queue:** when `maxConcurrent` is reached, the call waits FIFO for a free slot, at most `--rate-limit-max-wait <s>` / `SAP_MCP_RATE_LIMIT_MAX_WAIT` (default 60, `0` = old behaviour, `429` at once); a freed slot goes straight to the next waiter that fits, so nothing is overbooked and newcomers do not jump the queue; a caller that disconnects while waiting leaves the queue. A call that waited is logged with `waitedMs`, and its log line and governance journal record carry `queueWaitMs`. Keep wait time plus `--tool-timeout` below the client's own timeout (n8n node: 120 s by default). `requestsPerMinute` does not wait: a slot there only frees when a call drops out of the 60-second window, and a caller hitting it is usually a loop. Above a limit: `429` with `Retry-After` (seconds) and a JSON body `{ "error": "Too Many Requests", "reason": "call-rate-limit", "scope": "token"\|"destination", "limit", "retryAfterSeconds", "waitedMs"?, "hint" }`; a call that is refused consumes nothing. State is per server process and starts empty after a restart. Default: no limit. HTTP transport only. CLI: `tokens limit <label\|hash> …`, `destinations limit <name> …` with `--rate-per-minute <n>`, `--max-concurrent <n>` or `--clear`; `tokens issue` takes the same two flags |
 | CLI | `guniweb-sap-mcp destinations list\|add\|remove\|limit` and `tokens list\|issue\|limit\|revoke` (`--destinations <path>` or `SAP_MCP_DESTINATIONS`). Validates like the server before writing, writes atomically (temp file + rename, new files `0600`), the running server reloads on the next request. `tokens issue` prints the plain token once on stdout — capture with `TOKEN=$(…)`. `destinations add --from-env` copies the `SAP_*` environment (migration path); `--set field=value` for any auth type; `--allow-missing-env` when a `${VAR}` only exists inside the container. In Docker: `docker compose exec sap-mcp guniweb-sap-mcp tokens issue <dest>` — the config directory must be writable by the container user (`node`) for `add`/`issue`/`revoke` |
 | Docker | Mount the directory (`./sap-mcp-config:/config` — read-write if you want to run the CLI inside the container, `:ro` otherwise) and pass `SAP_MCP_DESTINATIONS=/config/destinations.json`; keep secrets in `env_file`/Docker secrets and reference them via `${...}` |
-| Admin API | `--admin-token <secret>` / `SAP_MCP_ADMIN_TOKEN` (≥ 16 characters; HTTP transport with `--destinations`) exposes the CLI operations under `/admin`: `GET /admin/destinations`, `PUT /admin/destinations/:name` (JSON body = entry fields; `?allowMissingEnv=true`; 201 created / 200 replaced), `DELETE /admin/destinations/:name[?force=true]`, `GET /admin/tokens`, `POST /admin/tokens` (`{ destination, label?, readOnly?, tiers?, rateLimit? }` → plain token **once** in the response, 201), `DELETE /admin/tokens/:ref` (label or hash prefix), `PUT`/`DELETE /admin/destinations/:name/rate-limit` and `PUT`/`DELETE /admin/tokens/:ref/rate-limit` (body `{ requestsPerMinute?, maxConcurrent? }`). Auth: `Authorization: Bearer <admin secret>` — the admin secret opens **only** `/admin`, n8n tokens and `--api-key` open **only** `/mcp`; `429` after 10 failures/minute per address; without the flag `/admin/*` is `404`. Every write validates, writes atomically and reloads the running configuration before answering (`reloaded: true`, otherwise `reloaded: false` + `reloadErrors`, last valid config stays). With `--admin-token` the server also starts when the file does not exist yet and no `SAP_*` is set (`/mcp` → `503` until the first destination/token exists) — the bootstrap path for `docker run … -e SAP_MCP_ADMIN_TOKEN=…`. Responses are `Cache-Control: no-store`; changes are logged with action/target/client address, never the token or the secret |
+| Admin API | `--admin-token <secret>` / `SAP_MCP_ADMIN_TOKEN` (≥ 16 characters; HTTP transport with `--destinations`) exposes the CLI operations under `/admin`: `GET /admin/destinations`, `PUT /admin/destinations/:name` (JSON body = entry fields; `?allowMissingEnv=true`; 201 created / 200 replaced), `DELETE /admin/destinations/:name[?force=true]`, `GET /admin/tokens`, `POST /admin/tokens` (`{ destination, label?, readOnly?, tiers?, rateLimit? }` → plain token **once** in the response, 201), `DELETE /admin/tokens/:ref` (label or hash prefix), `PUT`/`DELETE /admin/destinations/:name/rate-limit` and `PUT`/`DELETE /admin/tokens/:ref/rate-limit` (body `{ requestsPerMinute?, maxConcurrent? }`). Auth: `Authorization: Bearer <admin secret>` — the admin secret opens **only** `/admin`, n8n tokens and `--api-key` open **only** `/mcp`; `429` after 10 failures/minute per address; without the flag `/admin/*` is `404`. Every write validates, writes atomically and reloads the running configuration before answering (`reloaded: true`, otherwise `reloaded: false` + `reloadErrors`, last valid config stays). With `--admin-token` the server also starts when the file does not exist yet and no `SAP_*` is set (`/mcp` → `503` until a destination and a token for it exist; a destination named `default` alone does not open `/mcp`) — the bootstrap path for `docker run … -e SAP_MCP_ADMIN_TOKEN=…`. Responses are `Cache-Control: no-store`; changes are logged with action/target/client address, never the token or the secret |
 
 ## Transport Modes
 
@@ -236,6 +239,8 @@ http://localhost:8808/mcp
 This is the recommended transport for Docker deployments and remote server setups.
 
 **Protocol versions.** The endpoint speaks both MCP generations at the same URL: the stateless protocol **2026-07-28** (per-request `_meta` envelope, `MCP-Protocol-Version`/`Mcp-Method`/`Mcp-Name` headers, `server/discover`) and, for existing clients, **2025-11-25** and earlier (`initialize`, or plain requests without a version claim as the GuniWeb n8n node sends them). Nothing has to be configured; the request decides. `traceparent` is read from the HTTP header in both generations, and from `_meta.traceparent` when no header is sent. stdio works the same way: the first message of a connection selects the generation.
+
+**Gateways that filter by header.** In the 2026-07-28 protocol the server rejects a request whose `Mcp-Method` or `Mcp-Name` header disagrees with the JSON-RPC body (`400`, error `-32020`), so a gateway may decide on the headers alone. In the older protocol the server does not evaluate these headers: a request without `MCP-Protocol-Version: 2026-07-28` is served according to its body, whatever the headers say. A gateway that allows or blocks tools by header must therefore accept only requests carrying `MCP-Protocol-Version: 2026-07-28`, or read the method and tool name from the body. Clients of the older protocol (the n8n node up to 0.3, the n8n MCP Client tool) do not send that version and need the body-based rule.
 
 ### SSE (removed)
 
@@ -351,7 +356,8 @@ Built **from the published npm package**, not from a separate build path — the
 # A first look — mock S/4HANA inside the container, no SAP system needed
 docker run --rm -p 8808:8808 -e SAP_MCP_DEMO=true ghcr.io/guniweb/guniweb-sap-mcp:latest
 
-# Against a real system; anything after the image name is passed to the server
+# Against a real system; anything after the image name is passed to the server.
+# The HTTP transport needs SAP_MCP_API_KEY in .env, or tokens in a destinations.json
 docker run -d --name sap-mcp -p 8808:8808 --env-file .env \
   ghcr.io/guniweb/guniweb-sap-mcp:<version> --allow-write
 ```
@@ -409,10 +415,11 @@ Instead of inline environment variables in `docker-compose.yml`, you can use an 
 
 ### API Key Authentication
 
-When running with HTTP transport, you can secure the server with an API key:
+The HTTP transport requires authentication: an API key, or tokens in `destinations.json` (one per n8n credential, see [Named destinations](#named-destinations-destinationsjson)).
 
 ```bash
 guniweb-sap-mcp --transport http --port 8808 --api-key your-secret-key
+# in a container: -e SAP_MCP_API_KEY=your-secret-key
 ```
 
 Clients must include the API key as a Bearer token in the `Authorization` header:
@@ -427,10 +434,19 @@ The `/healthz` endpoint is always accessible without authentication. It returns 
 
 ### Open Mode
 
-Without `--api-key`, the server runs without authentication. This is suitable for:
+Since 0.11.0 the HTTP transport **does not start** without an API key or tokens — an unauthenticated `/mcp` hands the tool list and the SAP tools to anyone who reaches the port. The start fails with a message naming the ways out.
+
+If you want the open mode on purpose, say so with `--allow-unauthenticated` (or `SAP_MCP_ALLOW_UNAUTHENTICATED=true`). The server then starts as before and logs a warning. This is suitable for:
 - Docker internal networks where the port is not exposed to the host
-- Development and testing environments
-- Environments where authentication is handled by a reverse proxy
+- Environments where authentication is handled by a reverse proxy or gateway in front
+
+Two cases need no switch:
+- **`--demo`** talks only to the built-in mock SAP and stays open, so `docker run -p 8808:8808 -e SAP_MCP_DEMO=true …` keeps working.
+- **`--admin-token`** lets the server start without tokens for the bootstrap. `/mcp` then answers `503` (`reason: no-authentication-configured`) until a token exists; a destination named `default` alone no longer opens it.
+
+The same rule holds while the server runs: removing the last token entry closes `/mcp` instead of opening it.
+
+Upgrading from 0.10.x: you are affected if the start line of your server shows `"auth":"open"`.
 
 ### Rotating credentials
 

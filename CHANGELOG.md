@@ -8,6 +8,44 @@ Breaking changes to tool names or input schemas only come with a major version (
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-13
+
+Der HTTP-Transport startet nicht mehr ohne Anmeldung, und das Paket legt die Versionen aller Abhängigkeiten fest. Anlass war ein Abgleich mit den bekannten Angriffswegen auf MCP-Server. **Vor dem Update prüfen:** Wer in der Startzeile `"auth":"open"` sieht, braucht einen API-Key, Tokens oder den Schalter `--allow-unauthenticated`.
+
+### Breaking
+
+- **Der HTTP-Transport startet nicht mehr ohne Anmeldung.** Bisher lief der Server ohne `--api-key` und ohne Tokens offen und warnte nur; `/mcp` gab Werkzeugliste und SAP-Werkzeuge an jeden heraus, der den Port erreichte. Ab jetzt endet der Start in diesem Fall mit einer Fehlermeldung, die die Auswege nennt. **Betroffen ist, wer in der Startzeile `"auth":"open"` sieht.** Abhilfe: `--api-key` oder die neue Variable `SAP_MCP_API_KEY` setzen (und denselben Wert im n8n-Credential als Bearer hinterlegen) oder Tokens anlegen. Wer den offenen Betrieb bewusst will, etwa hinter einem Gateway, setzt `--allow-unauthenticated` bzw. `SAP_MCP_ALLOW_UNAUTHENTICATED=true`. Der Demo-Modus (`--demo`) bleibt ohne Schalter offen, er spricht nur mit dem eingebauten Mock-SAP.
+- **Eine Destination `default` allein öffnet `/mcp` nicht mehr.** Beim Bootstrap über `--admin-token` antwortet `/mcp` mit `503` und `reason: no-authentication-configured`, bis ein Token (oder ein API-Key) existiert. Dasselbe gilt im Betrieb: Wird der letzte Token-Eintrag entfernt, schließt `/mcp`, statt sich zu öffnen. Ohne eigenes `--webhook-secret` gilt das auch für `/idoc`.
+- **Schreibweise eines Eingabeschemas in `tools/list`.** Mit dem Sicherheitsupdate von `zod` (4.3.6 → 4.6.7) nennt `sap_nl_query` den Typ von `filters[].value` als `"type": ["string", "number", "boolean"]` statt als `anyOf` mit drei Einträgen. Erlaubt sind dieselben Werte wie zuvor; Namen, Felder und Pflichtangaben sind unverändert. Betroffen ist nur ein Client, der den Werkzeugvertrag wörtlich vergleicht. Wer 0.10.0 nach Erscheinen von `zod` 4.6 frisch installiert hat, sieht diese Schreibweise bereits, weil das Paket seine Abhängigkeiten bisher nicht festlegte.
+
+### Added
+
+- `SAP_MCP_API_KEY`: der API-Key des HTTP-Transports aus der Umgebung, damit ein Container ihn ohne geänderten Startbefehl bekommt. `--api-key` hat Vorrang.
+- `--allow-unauthenticated` / `SAP_MCP_ALLOW_UNAUTHENTICATED=true`: der offene HTTP-Betrieb als ausdrückliche Entscheidung.
+
+### Changed
+
+- **Annotationen der Schreibwerkzeuge.** `sap_update`, `sap_function`, `sap_idoc_send`, `sap_rfc_call` und `sap_bapi_call` tragen jetzt `destructiveHint: true`. Bisher stand dort `false`, was nach MCP „nur additive Änderungen“ bedeutet; `sap_update` überschreibt aber Felder, und die Wirkung eines Funktionsimports, IDocs oder RFC-Aufrufs kennt der Server nicht. `sap_enable_tools` trägt `readOnlyHint: false`, weil es weitere Werkzeuge freischaltet. Namen und Eingabeschemas sind unverändert. Ein Client, der anhand der Annotationen Aufrufe ohne Rückfrage zulässt, fragt bei diesen Werkzeugen jetzt nach.
+
+### Documentation
+
+- **Gateways, die nach `Mcp-Method`/`Mcp-Name` filtern** (Setup-Guide, `SECURITY.md`): Der Server gleicht diese Header nur im Protokoll 2026-07-28 mit dem Body ab. Eine Anfrage ohne `MCP-Protocol-Version: 2026-07-28` läuft als älteres Protokoll nach ihrem Body. Ein Gateway muss die Version deshalb verlangen oder am Body filtern.
+- README und Setup-Guide nennen an den Installationsbeispielen, dass für den Betrieb eine feste Version anzugeben ist.
+
+### Fixed
+
+- **Der Start brach mit den IDoc-Partner-Flags ab.** Seit 0.8.3 wies die Prüfung unbekannter Argumente `--sndprn`, `--rcvprn`, `--sndpor`, `--sndprt`, `--rcvpor` und `--rcvprt` ab, obwohl der Parser sie liest und die Anleitung sie nennt. Wer die IDoc-Partner per Flag setzte, bekam „Unbekannte Argumente“ statt eines laufenden Servers. Die Flags sind wieder bekannt und stehen jetzt auch in `--help`. Ein Test hält fest, dass jede Option aus der Tabelle im Setup-Guide angenommen wird.
+- **`sap_enable_tools` meldete über HTTP Erfolg, ohne etwas zu ändern.** Der HTTP-Transport baut je Anfrage einen frischen Server; eine Freischaltung war mit der Antwort wieder weg, `tools/list` blieb unverändert. Das Werkzeug antwortet dort jetzt mit `status: "error"` und nennt den Ausweg (`--tiers core,odata,idoc` beim Start), auch die Beschreibung sagt es. Unter stdio ändert sich nichts. Name, Eingabeschema und Annotationen sind gleich geblieben.
+- **Startwarnung im offenen Betrieb trotz Webhook-Secret.** Die Warnung „NO authentication“ kam bisher nur, wenn neben API-Key und Tokens auch `--webhook-secret` fehlte. Wer den IDoc-Webhook absicherte, erfuhr beim Start nicht, dass `/mcp` offen blieb. Im offenen Betrieb (`--allow-unauthenticated`, `--demo`) hängt die Warnung jetzt allein an der MCP-Anmeldung und nennt `/mcp` ausdrücklich.
+
+### Security
+
+- **Feste Versionen aller Abhängigkeiten.** Das npm-Paket bringt jetzt ein `npm-shrinkwrap.json` mit. `npm install guniweb-sap-mcp` und `npx guniweb-sap-mcp` installieren damit genau die direkten und transitiven Versionen, gegen die das Release getestet wurde, mit Integritätsprüfsumme. Bisher löste jede Installation die Versionsbereiche neu auf. Das Paket hat dadurch sechs statt fünf Dateien und ist rund 38 KB größer (145 KB gepackt). Korrekturen in Abhängigkeiten kommen ab jetzt über ein Release dieses Servers.
+- **Abhängigkeiten aktualisiert**, in denen Schwachstellen bekannt waren: `zod`, `body-parser`, `follow-redirects` (jeweils Stufe „high“), dazu `qs`, `fast-xml-parser` und `minimatch` (10 → 11; die Muster von `--expose` verhalten sich wie zuvor, durch Tests festgehalten). Offen bleibt eine Meldung der Stufe „moderate“: `@hono/node-server` (kommt über das MCP SDK; betroffen ist `serveStatic`, das der Server nicht verwendet).
+- Die CI prüft die Laufzeit-Abhängigkeiten mit `npm audit` und hält bei Stufe „high“ an. Dependabot ist für npm und GitHub Actions eingerichtet.
+- Die Release-Pipeline veröffentlicht Vorabversionen (`x.y.z-rc.n`) unter dem npm-Tag `next` statt `latest`.
+- **Feste Verweise in der Baukette.** Alle GitHub Actions sind per Commit-SHA festgelegt statt per Tag, das Basis-Image des Abbilds per Digest (`node:22-alpine@sha256:…`). Ein nachträglich verschobener Tag ändert damit weder die Pipeline noch das Abbild. Dependabot zieht SHAs und Digest nach, jetzt auch für Docker. Das Build-Argument `NODE_IMAGE` des `Dockerfile` entfällt: Das Image steht wörtlich in den `FROM`-Zeilen, weil Dependabot es nur dort aktualisiert. Wer ein anderes Basis-Image braucht, ändert beide Zeilen.
+
 ## [0.10.0] - 2026-10-15
 
 Ist die Grenze gleichzeitiger Aufrufe erreicht, warten überzählige Werkzeugaufrufe jetzt in einer Schlange, statt sofort abgewiesen zu werden.
@@ -344,6 +382,7 @@ tool had caused which SAP requests.
 - **Source maps from the published tarball.** `dist/index.js.map` is no longer generated; `package.json#files` is now an explicit 3-path whitelist (`dist`, `README.md`, `LICENSE`). The published tarball no longer leaks TypeScript source via `sourcesContent` (Phase 21).
 
 [unreleased]: https://github.com/guniweb/guniweb-sap-mcp/releases
+[0.11.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.11.0
 [0.10.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.10.0
 [0.9.0]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.9.0
 [0.8.3]: https://github.com/guniweb/guniweb-sap-mcp/releases/tag/v0.8.3

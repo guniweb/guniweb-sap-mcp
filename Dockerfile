@@ -34,9 +34,13 @@
 # =============================================================================
 
 # Alpine, weil ohne native Abhängigkeiten nichts an musl scheitern kann und das
-# Abbild klein bleibt. Über --build-arg auf node:22-slim umstellbar, falls eine
-# Umgebung glibc verlangt.
-ARG NODE_IMAGE=node:22-alpine
+# Abbild klein bleibt.
+#
+# Das Basis-Image steht in beiden FROM-Zeilen wörtlich, mit Tag und Digest des
+# Mehrarchitektur-Index. Der Digest legt den Inhalt fest, der Tag sagt, was
+# gemeint ist. Wörtlich statt über ARG, weil Dependabot nur FROM-Zeilen liest
+# und den Digest sonst nicht nachziehen könnte. Beide Zeilen müssen gleich
+# bleiben (tests/unit/supply-chain-pins.test.ts).
 
 # -----------------------------------------------------------------------------
 # Stufe 1 — Abhängigkeiten aus der npm-Registry holen
@@ -46,7 +50,7 @@ ARG NODE_IMAGE=node:22-alpine
 # --omit=optional nur JavaScript installiert wird — nichts davon ist
 # architekturabhängig. Der Mehrarchitektur-Build braucht dadurch keine
 # Emulation. Käme je ein RUN-Befehl in die Laufzeitstufe, gälte das nicht mehr.
-FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS deps
+FROM --platform=$BUILDPLATFORM node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a AS deps
 
 # Ohne Version kein Build: ein implizites "latest" würde bedeuten, dass zwei
 # Bauläufe desselben Stands verschiedene Abbilder ergeben können.
@@ -78,7 +82,7 @@ RUN npm install \
 # -----------------------------------------------------------------------------
 # Stufe 2 — Laufzeit
 # -----------------------------------------------------------------------------
-FROM ${NODE_IMAGE} AS runtime
+FROM node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a AS runtime
 
 ARG PACKAGE_VERSION
 

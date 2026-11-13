@@ -40,7 +40,7 @@ Which OData services exist and which of them are *released* SAP APIs is decided 
 | `sap_rfc_call` | rfc | RFC | Calls the remote-enabled function module you name | **write** (may change data — treated as write) |
 | `sap_bapi_call` | rfc | RFC / BAPI | Calls the BAPI you name; no implicit commit | **write** |
 | `sap_bapi_commit` | rfc | RFC / BAPI | `BAPI_TRANSACTION_COMMIT` on the same stateful connection as the preceding `sap_bapi_call`; an uncommitted session rolls back when it idles out | **write** |
-| `sap_enable_tools` | meta | none | Activates a tool tier for the session — no SAP call | — |
+| `sap_enable_tools` | meta | none | Activates a tool tier for the session (stdio only; over HTTP it reports that tiers are set with `--tiers`) — no SAP call | — |
 
 Tiers `idoc` and `rfc` are inactive by default (`--tiers` or `sap_enable_tools`); the RFC tools exist only when the SAP NW RFC SDK and the optional `node-rfc` package are present. Write tools are not registered at all until `--allow-write` is set; a per-token `readOnly` policy hides them again for that token.
 

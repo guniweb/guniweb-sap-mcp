@@ -43,7 +43,7 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Version und Ziel bestimmen
         id: target
@@ -105,9 +105,9 @@ jobs:
           echo "::error::guniweb-sap-mcp@${VERSION} ist nach 10 Minuten nicht in der npm-Registry aufgetaucht."
           exit 1
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -115,7 +115,7 @@ jobs:
 
       - name: Marken bestimmen
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ steps.target.outputs.image }}
           # semver-Marken aus der Version: 0.4.2, 0.4 und (steuerbar) latest.
@@ -128,7 +128,7 @@ jobs:
 
       - name: Bauen und veröffentlichen
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -145,7 +145,7 @@ jobs:
       # Herkunftsnachweis wie beim npm-Paket (dort über --provenance): belegt
       # überprüfbar, dass genau dieser Lauf dieses Abbild gebaut hat.
       - name: Herkunft bescheinigen
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-name: ${{ steps.target.outputs.image }}
           subject-digest: ${{ steps.build.outputs.digest }}
