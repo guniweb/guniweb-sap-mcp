@@ -8,6 +8,18 @@ Breaking changes to tool names or input schemas only come with a major version (
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-11-18
+
+Pflege-Release: aktualisierte Abhängigkeiten ohne offene Schwachstellenmeldung und eine Korrektur an der gemeldeten Wartezeit. Werkzeugnamen und Eingabeschemas sind unverändert.
+
+### Fixed
+
+- **`waitedMs` konnte nach Ablauf der Wartezeit 1 ms unter `--rate-limit-max-wait` liegen.** Timer und Wanduhr runden unabhängig auf Millisekunden. Die 429 nach vollem Warten nennt jetzt mindestens die eingestellte Frist. Ein Test, der genau das prüfte, ließ den ersten Publish-Lauf von 0.11.0 scheitern.
+
+### Security
+
+- **Abhängigkeiten aktualisiert.** Mit dem MCP SDK (`@modelcontextprotocol/server` 2.3.1 → 2.4.0, `@modelcontextprotocol/node` 2.1.1 → 2.1.2) kommen `@hono/node-server` 2.1.9 und `hono` 4.13.19; damit ist die in 0.11.0 offen gebliebene Meldung der Stufe „moderate“ erledigt, `npm audit` meldet für die Laufzeit-Abhängigkeiten nichts mehr. Dazu `axios` 1.21.1, `express` 5.3.0, `fast-xml-parser` 5.12.1, `jose` 6.2.17, `pino` 10.4.0 und `xml-crypto` 6.4.0. Werkzeugnamen und Eingabeschemas sind unverändert.
+
 ## [0.11.0] - 2026-11-13
 
 Der HTTP-Transport startet nicht mehr ohne Anmeldung, und das Paket legt die Versionen aller Abhängigkeiten fest. Anlass war ein Abgleich mit den bekannten Angriffswegen auf MCP-Server. **Vor dem Update prüfen:** Wer in der Startzeile `"auth":"open"` sieht, braucht einen API-Key, Tokens oder den Schalter `--allow-unauthenticated`.
